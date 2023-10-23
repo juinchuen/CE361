@@ -5,9 +5,22 @@ module sc_cpu(halt, clk, rst);
 
     reg [15:0] InstAddr; //aka program counter
 
-    always @ (*) begin
+    always @ (posedge clk or posedge rst) begin
         
-        
+        if (rst) begin
+
+            //rst, set everything to zero
+            InstAddr <= 0;
+
+        end else begin
+
+            case (opcode)
+
+                
+
+            endcase
+
+        end
 
     end
 
