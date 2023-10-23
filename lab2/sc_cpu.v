@@ -1,4 +1,4 @@
-module sc_cpu(halt, clk, rst)
+module sc_cpu(halt, clk, rst);
 
     output halt;
     input clk, rst;

@@ -11,7 +11,7 @@ module parse (  ins,
                 imm12_S, 
                 imm12_SB, 
                 imm20_U, 
-                imm20_UJ)
+                imm20_UJ);
 
     input [31:0] ins;
 
