@@ -1,6 +1,6 @@
 // defines 6 modules that can be instantiated to parse instruction fields of RISC-V instructions.
 
-module parse (  ins,
+module Parse (  ins,
                 funct7,
                 rs2, 
                 rs1, 
