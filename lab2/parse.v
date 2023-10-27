@@ -7,11 +7,11 @@ module Parse (  ins,
                 funct3, 
                 rd, 
                 opcode, 
-                imm12_I, 
-                imm12_S, 
-                imm12_SB, 
-                imm20_U, 
-                imm20_UJ);
+                imm_I, 
+                imm_S, 
+                imm_SB, 
+                imm_U, 
+                imm_UJ);
 
     input [31:0] ins;
 
@@ -20,10 +20,10 @@ module Parse (  ins,
     output [2:0] funct3;
     output [6:0] opcode;
 
-    output [11:0] imm12_I, imm12_S;
-    output [12:0] imm13_SB;
-    output [31:0] imm32_U;
-    output [19:0] imm21_UJ;
+    output [31:0] imm_I, imm_S;
+    output [31:0] imm_SB;
+    output [31:0] imm_U;
+    output [31:0] imm_UJ;
 
     assign funct7 = ins[31:25];
     assign funct3 = ins[14:12];
@@ -34,24 +34,18 @@ module Parse (  ins,
 
     assign opcode = ins[6:0];
 
-    assign imm12_I = ins[31:20];
+    assign imm_I[11:0] = ins[31:20];
+    assign imm_I[31:12] = ins[31] ? 20'hFFFFF : 20'h00000;
 
-    assign imm12_S[ 4:0] = ins[11:7];
-    assign imm12_S[11:5] = ins[31:25];
+    assign imm_S[11:0] = {ins[31:25],ins[11:7]};
+    assign imm_S[31:12] = ins[31] ? 20'hFFFFF : 20'h00000;
 
-    assign imm13_SB[12]   = ins[31];
-    assign imm13_SB[10:5] = ins[30:25];
-    assign imm13_SB[ 4:1] = ins[11: 8];
-    assign imm13_SB[11]   = ins[7];
-    assign imm13_SB[0]    = 1'b0;
+    assign imm_SB[12:0]   = {ins[31], ins[7], ins[30:25], ins[11:8], 1'b0;};
+    assign imm_SB[31:13]  = ins[31] ? 19'h7FFFF : 19'h00000;
 
-    assign imm32_U[31:12] = ins[31:12];
-    assign imm32_U[11: 0] = 12'b0;
+    assign imm_U = {ins[31:12], 12'b0};   
 
-    assign imm21_UJ[20]    = ins[31];
-    assign imm21_UJ[10:1]  = ins[30:21];
-    assign imm21_UJ[11]    = ins[20];
-    assign imm21_UJ[19:12] = ins[19:12];
-    assign imm21_UJ[0]     = 1'b0;
+    assign imm_UJ[20:0] = {ins[31], ins[19:12], ins[20], ins[30:21], 1'b0};
+    assign imm_UJ[31:21] = ins[31] ? 11'b11111111111 : 11b'00000000000;
 
 endmodule
