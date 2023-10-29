@@ -84,70 +84,107 @@ module load_extend(out, halt, mem_val, funct3);
                     
 endmodule
 
-module store(halt, DataAddr, DataRS1, DataRS2, imm_S, funct3);
-    // supports store instructions
-    input [31:0] DataRS1, DataRS2, imm_S;
-    input [2:0] funct3;
+module store_extend(out, halt, DataAddr, DataRS1, DataRS2, imm_S, funct3);
+    //performs sign extension on register value before store
+    //asserts halt if unrecognized funct3
+
+    output [31:0] out;
     output halt;
     output [31:0] DataAddr;
 
+    input [31:0] DataRS1, DataRS2, imm_S;
+    input [2:0] funct3;
+
+    wire [31:0] out;
+    
     assign DataAddr = DataRS1 + imm_S;
+
+    assign out = func3[2] ?
+                    func3[1] ?
+                        func3[0] ? 32'b0 //111
+                        :
+                            32'b0 //110
+                    :
+                        32'b0 //101
+                :   
+                    func3[1] ?
+                        func3[0] ? 32'b0 //011
+                        :
+                            DataRS2 //010, SW
+                    :
+                        func3[0] ? {16{DataRS2[15]}, DataRS2[15:0]}  //001, SH
+                        :
+                            {24{DataRS2[7], DataRS2[7:0]}} //000, SB
 
     assign halt =   !((funct3 == 3'b000) ||
                       (funct3 == 3'b001) ||
                       (funct3 == 3'010)) ;
 
-
-
-
-
 endmodule
 
-module register_write(out, halt, wen, PC_next, imm_I, imm_SB, imm_UJ, JALR_add_rs1_immI, mem_val, PC_curr, opcode, funct3, funct7, DataRS1, DataRS2);
+module register_write(DataInR, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, imm_I, imm_SB, imm_UJ, DataOutM, PC_curr, opcode, funct3, funct7, DataRS1, DataRS2);
     //combinational module to generate what is written to reg file
-    
-    //implement halt checking
 
-    output [31:0] out;
+    output [31:0] DataInR; //data to be written to register file
+    output RWEN; //register write enable signal
+    output [31:0] DataAddr, DataInM; //address and data to be written to memory
+    output DWEN; //data write enable signal
     output halt;
-    output wen; //write enable signal
     output [31:0] PC_next; //next PC value
 
-    input [31:0] imm_U, imm_I, imm_SB, imm_UJ, JALR_add_rs1_immI,
+    input [31:0] imm_U, imm_I, imm_SB, imm_UJ
     input [31:0] mem_val, PC_curr;
     input [6:0] opcode;
     input [2:0] funct3;
     input [6:0] funct7;
     input [31:0] DataRS1, DataRS2;
 
-    wire [31:0] out_ui, out_load, out_ari_i, out_ari;
-    wire halt_load, halt_ari_i, halt_ari, halt_pc_up, halt_opcodes;
+    wire [31:0] out_ui, out_load, out_ari_i, out_ari, DataAddrTemp, DataAddrStore;
+    wire halt_load, halt_store, halt_ari_i, halt_ari, halt_pc_up, halt_opcodes;
+    wire DWEN_temp;
+    wire [31:0] JALR_add_rs1_immI;
 
-    assign out =    ((opcode == 7'b0110111) || (opcode == 7'b0010111))   ? out_ui    : //upper immediate
-                    ((opcode == 7'b1101111) || (opcode == 7'b1100111))   ? PC + 4    : //JAL and JALR
-                    (opcode == 7'b0000011)                               ? out_load  : //loads
-                    (opcode == 7'b0010011)                               ? out_ari_i : //immediate arithmetic
-                    (opcode == 7'b0110011)                               ? out_ari   : //arithmetic
-                    32'b0;
+    assign JALR_add_rs1_immI = DataRS1 + imm_I;
+
+    assign DataInR =    ((opcode == 7'b0110111) || (opcode == 7'b0010111))   ? out_ui    : //upper immediate
+                        ((opcode == 7'b1101111) || (opcode == 7'b1100111))   ? PC + 4    : //JAL and JALR
+                        (opcode == 7'b0000011)                               ? out_load  : //loads
+                        (opcode == 7'b0010011)                               ? out_ari_i : //immediate arithmetic
+                        (opcode == 7'b0110011)                               ? out_ari   : //arithmetic
+                        32'b0;
 
     assign halt_opcodes =   
                     (opcode == 7'b1100111)  ? (funct3 != 3'b000)    : //JAL and JALR
                     (opcode == 7'b0000011)  ? halt_load             : //loads
+                    (opcode == 7'b0100011)  ? halt_store            : //stores
                     (opcode == 7'b0010011)  ? halt_ari_i            : //immediate arithmetic
                     (opcode == 7'b0110011)  ? halt_ari              : //arithmetic
                     1'b0;
     
     assign halt = halt_opcodes & halt_pc_up; //halt if opcode not recognized or PC update module halts
     
-    assign wen =    ((opcode == 7'b0110111) || (opcode == 7'b0010111))   ? 1 & !halt : //upper immediate
+    assign RWEN =   ((opcode == 7'b0110111) || (opcode == 7'b0010111))   ? 1 & !halt : //upper immediate
                     ((opcode == 7'b1101111) || (opcode == 7'b1100111))   ? 1 & !halt : //JAL and JALR
                     (opcode == 7'b0000011)                               ? 1 & !halt : //loads
                     (opcode == 7'b0010011)                               ? 1 & !halt : //immediate arithmetic
                     (opcode == 7'b0110011)                               ? 1 & !halt : //arithmetic
                     0;
     
+    assign DataAddrTemp = ((opcode == 7'b0100011) ? DataAddr + imm_S : // stores
+                           (opcode == 7'b0000011) ? DataAddr + imm_I : // loads
+                           DataAddr); 
+
+    assign DataAddr = DataAddrTemp;
+
+    assign DWEN = (opcode == 7'b0100011) ? 1 & !halt : //stores
+                  0; 
+
+    assign DataInM = ((opcode == 7'b0100011) ? out_store : //stores
+                     32'b0); 
+    
     upper_imm   ui0 (out_ui, imm_U, PC_curr, opcode); //upper immediate
-    load_extend le0 (out_load, halt_load, mem_val, funct3); //loads
+    load_extend le0 (out_load, halt_load, DataOutM, funct3); //loads
+    store_extend se0 (out_store, halt_store, DataAddrStore, DataRS1, DataRS2, imm_S, funct3); //stores
     ari_imm     ai0 (out_ari_i, halt_ari_i, imm_I, DataRS1, funct3); //immediate arithmetic
     arithmetic  ar0 (out_ari, halt_ari, DataRS1, DataRS2, funct3, funct7); //arithmetic
     pc_update   pc_up0 (PC_next, halt_pc_up, PC_curr, imm_SB, imm_UJ, JALR_add_rs1_immI, opcode, funct3, DataRS1, DataRS2); //updates PC
@@ -347,13 +384,13 @@ module SingleCycleCPU(halt, clk, rst);
     wire [31:0] DataInM, DataInR;
 
     //wires for load
-    wire [31:0] loadVal;
+    // wire [31:0] loadVal;
     wire [31:0] DataAddr;
-    assign DataAddr = DataRS1 + imm_I;
+    // assign DataAddr = DataRS1 + imm_I;
 
     //wires for JALR
     wire [31:0] JALR_add_rs1_immI;
-    assign JALR_add_rs1_immI = imm_I + DataRS1;
+    // assign JALR_add_rs1_immI = imm_I + DataRS1;
 
     always @ (negedge clk or posedge rst) begin
         
@@ -378,66 +415,67 @@ module SingleCycleCPU(halt, clk, rst);
         
         else begin
 
-            DWEN <= 0;
-            RWEN <= 0;
+            PC <= PC_next;
+            // DWEN <= 0;
+            // RWEN <= 0;
 
-            case (opcode)
+            // case (opcode)
 
-                7'b0110111: begin //LUI
+            //     7'b0110111: begin //LUI
 
-                                PC      <= PC + 4;
+            //                     PC      <= PC + 4;
 
-                            end
+            //                 end
 
-                7'b0010111: begin //AUIPC
-
-
-                                PC      <= PC + imm_U;
-
-                            end
-
-                7'b1101111: begin //JAL
-
-                                DataInR <= PC + 4;
-                                AddrWR  <= rd;
-                                RWEN    <= 1;
-
-                                PC      <= PC + imm_UJ;
-
-                            end
-
-                7'b1100111: begin //JALR 
-
-                                halt    <= (funct3 == 3'b000) ? 0 : 1;
-
-                                DataInR <= PC + 4;
-                                AddrWR  <= rd;
-                                RWEN    <= 1;
-
-                                PC      <= {JALR_add_rs1_immI[31:1], 1'b0};
-
-                            end
-
-                7'b1100011: begin //BRANCH
-
-                                halt    <= halt_branch;
-
-                                PC      <= branch ? PC + imm_SB : PC + 4;
-
-                            end
-
-                7'b0000011: begin //LOAD
-
-                                RWEN <= 1;
-
-                                DataInR <= loadVal;
-
-                            end
+            //     7'b0010111: begin //AUIPC
 
 
+            //                     PC      <= PC + imm_U;
+
+            //                 end
+
+            //     7'b1101111: begin //JAL
+
+            //                     DataInR <= PC + 4;
+            //                     AddrWR  <= rd;
+            //                     RWEN    <= 1;
+
+            //                     PC      <= PC + imm_UJ;
+
+            //                 end
+
+            //     7'b1100111: begin //JALR 
+
+            //                     halt    <= (funct3 == 3'b000) ? 0 : 1;
+
+            //                     DataInR <= PC + 4;
+            //                     AddrWR  <= rd;
+            //                     RWEN    <= 1;
+
+            //                     PC      <= {JALR_add_rs1_immI[31:1], 1'b0};
+
+            //                 end
+
+            //     7'b1100011: begin //BRANCH
+
+            //                     halt    <= halt_branch;
+
+            //                     PC      <= branch ? PC + imm_SB : PC + 4;
+
+            //                 end
+
+            //     7'b0000011: begin //LOAD
+
+            //                     RWEN <= 1;
+
+            //                     DataInR <= loadVal;
+
+            //                 end
 
 
-            endcase
+
+
+            // endcase
 
         end
 
@@ -448,5 +486,5 @@ module SingleCycleCPU(halt, clk, rst);
     RegFile         rf0 (rs1, DataRS1, rs2, DataRS2, rd, out_rw, RWEN, clk);
     Parse           p0  (InstOut, funct7, rs2, rs1, funct3, rd, opcode, imm_I, imm_S, imm_SB, imm_U, imm_UJ);
     branch_flag     bf0 (branch, halt_branch  , funct3, DataRS1, DataRS2);
-    register_write  rw0 (DataInR, halt, RWEN, PC_next, imm_I, imm_SB, imm_UJ, JALR_add_rs1_immI, DataOutM, PC, opcode, funct3, funct7, DataRS1, DataRS2);
+    register_write  rw0 (DataInR, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, imm_I, imm_SB, imm_UJ, DataOutM, PC, opcode, funct3, funct7, DataRS1, DataRS2);
 endmodule
