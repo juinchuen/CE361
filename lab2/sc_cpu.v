@@ -26,7 +26,7 @@ module branch_flag(branch, halt, funct3, opA, opB);
 
     wire beq, bne, blt, bge, bltu, bgeu, slt;
 
-    // if opcode and inequality match, asset flag
+    // if opcode and inequality match, assert flag
     assign beq  = (funct3 == 3'b000) & (opA == opB);
     assign bne  = (funct3 == 3'b001) & (opA != opB);
     assign blt  = (funct3 == 3'b100) & slt;
@@ -37,12 +37,7 @@ module branch_flag(branch, halt, funct3, opA, opB);
     assign branch = beq || bne || blt || bge || bltu || bgeu;
     
     // assert halt if unrecognized funct 3
-    assign halt = !((funct3 == 3'b000) || 
-                    (funct3 == 3'b001) || 
-                    (funct3 == 3'b100) || 
-                    (funct3 == 3'b101) || 
-                    (funct3 == 3'b110) || 
-                    (funct3 == 3'b111));
+    assign halt = (funct3 == 3'b010) || (funct3 == 3'b011);
 
     //signed less than module
     signed_lt slt0 (slt, opA, opB)    
@@ -105,7 +100,7 @@ module store_extend(out, halt, DataAddr, DataRS1, DataRS2, imm_S, funct3);
                         :
                             32'b0 //110
                     :
-                        32'b0 //101
+                        32'b0 //101 and 100
                 :   
                     func3[1] ?
                         func3[0] ? 32'b0 //011
@@ -125,12 +120,12 @@ endmodule
 module register_write(DataInR, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, imm_I, imm_SB, imm_UJ, DataOutM, PC_curr, opcode, funct3, funct7, DataRS1, DataRS2);
     //combinational module to generate what is written to reg file
 
-    output [31:0] DataInR; //data to be written to register file
-    output RWEN; //register write enable signal
-    output [31:0] DataAddr, DataInM; //address and data to be written to memory
-    output DWEN; //data write enable signal
-    output halt;
-    output [31:0] PC_next; //next PC value
+    output [31:0]   DataInR;            //data to be written to register file
+    output          RWEN;               //register write enable signal
+    output [31:0]   DataAddr, DataInM;  //address and data to be written to memory
+    output          DWEN;               //data write enable signal
+    output          halt;
+    output [31:0]   PC_next;            //next PC value
 
     input [31:0] imm_U, imm_I, imm_SB, imm_UJ
     input [31:0] mem_val, PC_curr;
