@@ -407,7 +407,7 @@ module SingleCycleCPU(halt, clk, rst);
     wire [31:0] imm_I, imm_S, imm_SB, imm_U, imm_UJ;
 
     //data wires/reg
-    wire [31:0] InstOut;
+    wire [31:0] InstWord;
     wire [31:0] DataAddr, DataInM, DataOutM
     wire [31:0]  DataRS1, DataRS2, DataInRd;
     wire DWEN, RWEN;
@@ -438,10 +438,10 @@ module SingleCycleCPU(halt, clk, rst);
 
     end
 
-    Parse           p0  (InstOut, funct7, rs2, rs1, funct3, rd, opcode, imm_I, imm_S, imm_SB, imm_U, imm_UJ);
-    InstMem         im0 (PC, `SIZE_WORD, InstOut, clk);
-    DataMem         dm0 (DataAddr, funct3[1:0], DataInM, DataOutM, DWEN, clk);
-    RegFile         rf0 (rs1, DataRS1, rs2, DataRS2, rd, DataInRd, RWEN, clk);
-    register_write  rw0 (DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, imm_I, imm_SB, imm_UJ, DataOutM, PC, opcode, funct3, funct7, DataRS1, DataRS2);
+    Parse           p0      (InstWord, funct7, rs2, rs1, funct3, rd, opcode, imm_I, imm_S, imm_SB, imm_U, imm_UJ);
+    InstMem         IMEM    (PC, `SIZE_WORD, InstWord, clk);
+    DataMem         DMEM    (DataAddr, funct3[1:0], DataInM, DataOutM, DWEN, clk);
+    RegFile         RF      (rs1, DataRS1, rs2, DataRS2, rd, DataInRd, RWEN, clk);
+    register_write  rw0     (DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, imm_I, imm_SB, imm_UJ, DataOutM, PC, opcode, funct3, funct7, DataRS1, DataRS2);
 
 endmodule
