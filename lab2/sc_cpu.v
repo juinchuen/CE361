@@ -174,7 +174,7 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     input [31:0] DataRS1, DataRS2;
     input [31:0] DataOutM;
 
-    wire [31:0] out_ui, out_load, out_ari_i, out_ari, out_store, DataAddrTemp, DataAddrStore;
+    wire [31:0] out_ui, out_load, out_ari_i, out_ari, out_store, DataAddrStore;
     wire halt_load, halt_store, halt_ari_i, halt_ari, halt_pc_up, halt_opcodes, halt_effective_addr;
     wire DWEN_temp;
     wire [31:0] JALR_add_rs1_immI;
@@ -195,19 +195,25 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
                     (opcode == 7'b0100011)  ? halt_store            : //stores
                     (opcode == 7'b0010011)  ? halt_ari_i            : //immediate arithmetic
                     (opcode == 7'b0110011)  ? halt_ari              : //arithmetic
-                    1'b0;
+                    (opcode == 7'b0110111)  ? 0                     : //LUI
+                    (opcode == 7'b0010111)  ? 0                     : //AUIPC
+                    (opcode == 7'b1100011)  ? 0                     : //branch
+                    1'b1;                                             //unrecognized opcode
     
-    assign halt = halt_opcodes & halt_effective_addr & halt_pc_up; //halt if opcode not recognized, effective address not aligned or PC update halts
+    assign halt = (opcode == 7'b0000011 || opcode == 7'b0100011) ? halt_opcodes || halt_pc_up || halt_effective_addr : //loads and stores
+                  halt_opcodes || halt_pc_up; //other cases
     
-    assign RWEN =   ((opcode == 7'b0110111) || (opcode == 7'b0010111))   ? 1 & !halt : //upper immediate
-                    ((opcode == 7'b1101111) || (opcode == 7'b1100111))   ? 1 & !halt : //JAL and JALR
-                    (opcode == 7'b0000011)                               ? 1 & !halt : //loads
-                    (opcode == 7'b0010011)                               ? 1 & !halt : //immediate arithmetic
-                    (opcode == 7'b0110011)                               ? 1 & !halt : //arithmetic
-                    0;
+    // RWEN is neg assert
+    assign RWEN = !(((opcode == 7'b0110111) || (opcode == 7'b0010111))    ? !halt : //upper immediate
+                    ((opcode == 7'b1101111) || (opcode == 7'b1100111))      ? !halt : //JAL and JALR
+                    (opcode == 7'b0000011)                                  ? !halt : //loads
+                    (opcode == 7'b0010011)                                  ? !halt : //immediate arithmetic
+                    (opcode == 7'b0110011)                                  ? !halt : //arithmetic
+                    0); 
     
     assign DataAddr = EffectiveDataAddr; //address to be read from memory or written to memory
 
+    // DWEN is neg assert
     assign DWEN = (opcode == 7'b0100011) ? 1 & !halt : //stores
                   0; 
 
@@ -219,7 +225,7 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     store_extend    se0 (.out(out_store), .halt(halt_store), .DataRS2(DataRS2), .funct3(funct3)); //stores
     ari_imm         ai0 (.out(out_ari_i), .halt(halt_ari_i), .imm_I(imm_I), .DataRS1(DataRS1), .funct3(funct3)); //immediate arithmetic
     arithmetic      ar0 (.out(out_ari), .halt(halt_ari), .DataRS1(DataRS1), .DataRS2(DataRS2), .funct3(funct3), .funct7(funct7)); //arithmetic
-    effective_addr  ea0 (.EffectiveDataAddr(EffectiveDataAddr), .halt(halt_effective_addr), .DataAddr(DataAddrTemp), .imm_S(imm_S), .imm_I(imm_I), .opcode(opcode), .func3(funct3)); //effective address
+    effective_addr  ea0 (.EffectiveDataAddr(EffectiveDataAddr), .halt(halt_effective_addr), .DataAddr(DataAddr), .imm_S(imm_S), .imm_I(imm_I), .opcode(opcode), .func3(funct3)); //effective address
     pc_update       pc_up0 (.out(PC_next), .halt(halt_pc_up), .PC(PC_curr), .imm_SB(imm_SB), .imm_UJ(imm_UJ), .JALR_add_rs1_immI(JALR_add_rs1_immI), .opcode(opcode), .funct3(funct3), .rs1(DataRS1), .rs2(DataRS2)); //PC update
 
 endmodule
@@ -367,19 +373,21 @@ module pc_update(out, halt, PC, imm_SB, imm_UJ, JALR_add_rs1_immI, opcode, funct
                             :
                                 PC + 4 // DO NOT BRANCH if branch flag asserted
                         :
-                            (opcode == 7'b0110011 || opcode == 7'b0010011 || opcode == 7'b0000011 || opcode == 7'b0010011) ?
-                                PC + 4 // INCREMENT PC for arithmetic, load, store
+                            (opcode == 7'b0110011 || opcode == 7'b0010011 || opcode == 7'b0000011 || 7'b0110111 || 7'b0010111 || 7'b0100011) ?
+                                PC + 4 // INCREMENT PC for arithmetic, load, store, auipc, and lui
                             :
                                 PC ; // DO NOT INCREMENT PC if opcode not recognized
 
-    assign halt =  !((opcode == 7'b1101111) ||
-                     (opcode == 7'b1100111) ||
-                     (opcode == 7'b1100011) ||
-                     (opcode == 7'b0110011) ||
-                     (opcode == 7'b0010011) ||
-                     (opcode == 7'b0000011) ||
-                     (opcode == 7'b0010011))||
-                     halt_branch;     
+    assign halt =   !((opcode == 7'b1101111) || //JAL
+                      (opcode == 7'b1100111) || //JALR
+                      (opcode == 7'b1100011) || //branch
+                      (opcode == 7'b0110011) || //arithmetic
+                      (opcode == 7'b0010011) || //immediate arithmetic
+                      (opcode == 7'b0000011) || //loads
+                      (opcode == 7'b0100011) || //stores
+                      (opcode == 7'b0010111) || //AUIPC
+                      (opcode == 7'b0110111))|| //LUI
+                      halt_branch;        
 
     branch_flag bf0 (.branch(branch), .halt(halt_branch), .funct3(funct3), .opA(rs1), .opB(rs2)); //branch flag module                   
 endmodule
@@ -436,8 +444,8 @@ module SingleCycleCPU(halt, clk, rst);
 
     end
 
-    Parse           p0      (.ins(InstWord), .funct7(funct7), .rs2(rs2), .rs1(rs1), .funct3(funct3), .rd(rd), .opcode(opcode), .imm_I(imm_I), .imm_S(imm_S), .imm_SB(imm_SB), .imm_U(imm_U), .imm_UJ(imm_UJ)); //parses instruction
     InstMem         IMEM    (.Addr(PC), .Size(`SIZE_WORD), .DataOut(InstWord), .CLK(clk)); //instruction memory
+    Parse           p0      (.ins(InstWord), .funct7(funct7), .rs2(rs2), .rs1(rs1), .funct3(funct3), .rd(rd), .opcode(opcode), .imm_I(imm_I), .imm_S(imm_S), .imm_SB(imm_SB), .imm_U(imm_U), .imm_UJ(imm_UJ)); //parses instruction
     DataMem         DMEM    (.Addr(DataAddr), .Size(`SIZE_WORD), .DataIn(DataInM), .DataOut(DataOutM), .WEN(DWEN), .CLK(clk)); //data memory
     RegFile         RF      (.AddrA(rs1), .DataOutA(DataRS1), .AddrB(rs2), .DataOutB(DataRS2), .AddrW(rd), .DataInW(DataInRd), .WenW(RWEN), .CLK(clk)); //register file
     register_write  rw0     (.DataInRd(DataInRd), .RWEN(RWEN), .DataAddr(DataAddr), .DWEN(DWEN), .DataInM(DataInM), .halt(halt), .PC_next(PC_next), .imm_I(imm_I), .imm_S(imm_S), .imm_SB(imm_SB), .imm_U(imm_U), .imm_UJ(imm_UJ), .DataOutM(DataOutM), .PC_curr(PC), .opcode(opcode), .funct3(funct3), .funct7(funct7), .DataRS1(DataRS1), .DataRS2(DataRS2)); //register write

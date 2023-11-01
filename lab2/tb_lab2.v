@@ -6,7 +6,7 @@ module tb;
    wire halt;
 
    // Single Cycle CPU instantiation
-   SingleCycleCPU CPU (halt, clk,rst);
+   SingleCycleCPU CPU (halt, clk, rst);
 
    // Clock Period = 10 time units
    //  (stops when halt is asserted)  
@@ -25,7 +25,7 @@ module tb;
       #0 $readmemh("regs_in.hex", CPU.RF.Mem);
 
       // Feel free to modify to inspect whatever you want
-      #0 $monitor($time,, "PC=%08x IR=%08x RS1=%08X RS2=%08X RD=%08X", CPU.PC, CPU.InstWord, CPU.DataRS1, CPU.DataRS2, CPU.DataInRd);
+      #0 $monitor($time,, "PC=%08x IR=%08x rs1 = %d DRS1=%08X rs2 = %d DRS2=%08X  rd = %d DRD=%08X HALT=%b opcode=%7b", CPU.PC, CPU.InstWord, CPU.rs1, CPU.DataRS1, CPU.rs2, CPU.DataRS2, CPU.rd, CPU.DataInRd, halt, CPU.opcode);
 
       // Exits when halt is asserted
       wait(halt);
