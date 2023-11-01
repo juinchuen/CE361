@@ -198,17 +198,20 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
                     (opcode == 7'b0110111)  ? 0                     : //LUI
                     (opcode == 7'b0010111)  ? 0                     : //AUIPC
                     (opcode == 7'b1100011)  ? 0                     : //branch
-
                     1'b1;                                             //unrecognized opcode
     
     assign halt = halt_opcodes | halt_effective_addr | halt_pc_up; //halt if opcode not recognized, effective address not aligned or PC update halts
     
-    assign RWEN =   ((opcode == 7'b0110111) || (opcode == 7'b0010111))   ? 1 & !halt : //upper immediate
-                    ((opcode == 7'b1101111) || (opcode == 7'b1100111))   ? 1 & !halt : //JAL and JALR
-                    (opcode == 7'b0000011)                               ? 1 & !halt : //loads
-                    (opcode == 7'b0010011)                               ? 1 & !halt : //immediate arithmetic
-                    (opcode == 7'b0110011)                               ? 1 & !halt : //arithmetic
-                    0;
+    assign RWEN =   !(((opcode == 7'b0110111) || (opcode == 7'b0010111))   ? !halt : //upper immediate
+                    ((opcode == 7'b1101111) || (opcode == 7'b1100111))   ? !halt : //JAL and JALR
+                    (opcode == 7'b0000011)                               ? !halt : //loads
+                    (opcode == 7'b0010011)                               ? !halt : //immediate arithmetic
+                    (opcode == 7'b0110011)                               ? !halt : //arithmetic
+                    0); 
+                    
+                    // negation for RWEN is necessary because
+                    // write enable signal to register file 
+                    // is active low
     
     assign DataAddr = EffectiveDataAddr; //address to be read from memory or written to memory
 
@@ -219,7 +222,7 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
                      32'b0); 
     
     upper_imm       ui0 (.out(out_ui), .imm_U(imm_U), .PC(PC_curr), .opcode(opcode)); //upper immediate
-    load_extend     le0 (.out(out_load), .halt(halt_load), .mem_val(mem_val), .funct3(funct3)); //loads
+    load_extend     le0 (.out(out_load), .halt(halt_load), .mem_val(DataOutM), .funct3(funct3)); //loads
     store_extend    se0 (.out(out_store), .halt(halt_store), .DataRS2(DataRS2), .funct3(funct3)); //stores
     ari_imm         ai0 (.out(out_ari_i), .halt(halt_ari_i), .imm_I(imm_I), .DataRS1(DataRS1), .funct3(funct3)); //immediate arithmetic
     arithmetic      ar0 (.out(out_ari), .halt(halt_ari), .DataRS1(DataRS1), .DataRS2(DataRS2), .funct3(funct3), .funct7(funct7)); //arithmetic
@@ -371,18 +374,20 @@ module pc_update(out, halt, PC, imm_SB, imm_UJ, JALR_add_rs1_immI, opcode, funct
                             :
                                 PC + 4 // DO NOT BRANCH if branch flag asserted
                         :
-                            (opcode == 7'b0110011 || opcode == 7'b0010011 || opcode == 7'b0000011 || opcode == 7'b0010011) ?
+                            (opcode == 7'b0110011 || opcode == 7'b0010011 || opcode == 7'b0000011 || 7'b0110111 || 7'b0010111 || 7'b0100011) ?
                                 PC + 4 // INCREMENT PC for arithmetic, load, store
                             :
                                 PC ; // DO NOT INCREMENT PC if opcode not recognized
 
-    assign halt =  !((opcode == 7'b1101111) ||
-                     (opcode == 7'b1100111) ||
-                     (opcode == 7'b1100011) ||
-                     (opcode == 7'b0110011) ||
-                     (opcode == 7'b0010011) ||
-                     (opcode == 7'b0000011) ||
-                     (opcode == 7'b0010011))||
+    assign halt =  !((opcode == 7'b1101111) || //JAL
+                     (opcode == 7'b1100111) || //JALR
+                     (opcode == 7'b1100011) || //branch
+                     (opcode == 7'b0110011) || //arithmetic
+                     (opcode == 7'b0010011) || //immediate arithmetic
+                     (opcode == 7'b0000011) || //loads
+                     (opcode == 7'b0100011) || //stores
+                     (opcode == 7'b0010111) || //AUIPC
+                     (opcode == 7'b0110111))|| //LUI
                      halt_branch;     
 
     branch_flag bf0 (.branch(branch), .halt(halt_branch), .funct3(funct3), .opA(rs1), .opB(rs2)); //branch flag module                   
