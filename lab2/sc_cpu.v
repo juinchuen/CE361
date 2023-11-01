@@ -167,7 +167,7 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     output [31:0]   PC_next;            //next PC value
 
     input [31:0] imm_I, imm_S, imm_SB, imm_U, imm_UJ;
-    input [31:0] mem_val, PC_curr;
+    input [31:0] PC_curr;
     input [6:0] opcode;
     input [2:0] funct3;
     input [6:0] funct7;
@@ -221,7 +221,7 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
                      32'b0); 
     
     upper_imm       ui0 (.out(out_ui), .imm_U(imm_U), .PC(PC_curr), .opcode(opcode)); //upper immediate
-    load_extend     le0 (.out(out_load), .halt(halt_load), .mem_val(mem_val), .funct3(funct3)); //loads
+    load_extend     le0 (.out(out_load), .halt(halt_load), .mem_val(DataOutM), .funct3(funct3)); //loads
     store_extend    se0 (.out(out_store), .halt(halt_store), .DataRS2(DataRS2), .funct3(funct3)); //stores
     ari_imm         ai0 (.out(out_ari_i), .halt(halt_ari_i), .imm_I(imm_I), .DataRS1(DataRS1), .funct3(funct3)); //immediate arithmetic
     arithmetic      ar0 (.out(out_ari), .halt(halt_ari), .DataRS1(DataRS1), .DataRS2(DataRS2), .funct3(funct3), .funct7(funct7)); //arithmetic
