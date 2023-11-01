@@ -43,7 +43,7 @@ module branch_flag(branch, halt, funct3, opA, opB);
     assign halt = (funct3 == 3'b010) || (funct3 == 3'b011);
 
     //signed less than module
-    signed_lt slt0 (slt, opA, opB)    
+    signed_lt slt0 (slt, opA, opB);    
 
 endmodule
 
@@ -73,9 +73,9 @@ module load_extend(out, halt, mem_val, funct3);
                             : 
                                         mem_val //010, LW
                         :
-                            funct3[0] ? {16{mem_val[15]}, mem_val[15:0]} //001, LH
+                            funct3[0] ? {{16{mem_val[15]}}, mem_val[15:0]} //001, LH
                             : 
-                                        {24{mem_val[7], mem_val[7:0]}} //000, LB
+                                        {{24{mem_val[7]}}, mem_val[7:0]}; //000, LB
 
     assign halt =   (funct3 == 3'b011) ||
                     (funct3 == 3'b110) ||
@@ -91,31 +91,31 @@ module store_extend(out, halt, DataRS2, funct3);
     output [31:0] out;
     output halt;
 
-    input [31:0] DataRS2
+    input [31:0] DataRS2;
     input [2:0] funct3;
 
     wire halt_alignment;
 
-    assign out = func3[2] ?
-                    func3[1] ?
-                        func3[0] ? 32'b0 //111
+    assign out = funct3[2] ?
+                    funct3[1] ?
+                        funct3[0] ? 32'b0 //111
                         :
                             32'b0 //110
                     :
                         32'b0 //101 and 100
                 :   
-                    func3[1] ?
-                        func3[0] ? 32'b0 //011
+                    funct3[1] ?
+                        funct3[0] ? 32'b0 //011
                         :
                             DataRS2 //010, SW
                     :
-                        func3[0] ? {16{DataRS2[15]}, DataRS2[15:0]}  //001, SH
+                        funct3[0] ? {{16{DataRS2[15]}}, DataRS2[15:0]}  //001, SH
                         :
-                            {24{DataRS2[7], DataRS2[7:0]}} //000, SB
+                            {{24{DataRS2[7]}}, DataRS2[7:0]}; //000, SB
 
     assign halt =   !((funct3 == 3'b000) ||
                       (funct3 == 3'b001) ||
-                      (funct3 == 3'010)) ;
+                      (funct3 == 3'b010)) ;
 
 endmodule
 
@@ -133,14 +133,14 @@ module addr_is_aligned(halt, addr, func3);
 
 endmodule
 
-module effective_addr(EffectiveDataAddr, DataAddr, halt, opcode, func3);
+module effective_addr(EffectiveDataAddr, DataAddr, halt, opcode, func3, imm_S, imm_I);
     // calculate effective address for loads and stores
     // asserts halt if address is not appropriately aligned for loads and stores
 
     output [31:0] EffectiveDataAddr;
     output halt;
 
-    input [31:0] DataAddr;
+    input [31:0] DataAddr, imm_S, imm_I;
     input [6:0] opcode;
     input [2:0] func3;
 
@@ -157,7 +157,7 @@ module effective_addr(EffectiveDataAddr, DataAddr, halt, opcode, func3);
 
 endmodule
 
-module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, imm_I, imm_SB, imm_UJ, DataOutM, PC_curr, opcode, funct3, funct7, DataRS1, DataRS2);
+module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, imm_U, imm_I, imm_SB, imm_UJ, DataOutM, PC_curr, opcode, funct3, funct7, DataRS1, DataRS2);
     //combinational module to generate what is written to reg file
 
     output [31:0]   DataInRd;           //data to be written to register file
@@ -167,14 +167,14 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     output          halt;
     output [31:0]   PC_next;            //next PC value
 
-    input [31:0] imm_U, imm_I, imm_SB, imm_UJ
-    input [31:0] mem_val, PC_curr;
+    input [31:0] imm_U, imm_I, imm_SB, imm_UJ;
+    input [31:0] PC_curr;
     input [6:0] opcode;
     input [2:0] funct3;
     input [6:0] funct7;
-    input [31:0] DataRS1, DataRS2;
+    input [31:0] DataRS1, DataRS2, DataOutM;
 
-    wire [31:0] out_ui, out_load, out_ari_i, out_ari, DataAddrTemp, DataAddrStore;
+    wire [31:0] out_ui, out_load, out_ari_i, out_ari, out_store, DataAddrTemp, DataAddrStore;
     wire halt_load, halt_store, halt_ari_i, halt_ari, halt_pc_up, halt_opcodes, halt_effective_addr;
     wire DWEN_temp;
     wire [31:0] JALR_add_rs1_immI;
@@ -183,7 +183,7 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     assign JALR_add_rs1_immI = DataRS1 + imm_I;
 
     assign DataInRd =   ((opcode == 7'b0110111) || (opcode == 7'b0010111))   ? out_ui    : //upper immediate
-                        ((opcode == 7'b1101111) || (opcode == 7'b1100111))   ? PC + 4    : //JAL and JALR
+                        ((opcode == 7'b1101111) || (opcode == 7'b1100111))   ? PC_curr + 4    : //JAL and JALR
                         (opcode == 7'b0000011)                               ? out_load  : //loads
                         (opcode == 7'b0010011)                               ? out_ari_i : //immediate arithmetic
                         (opcode == 7'b0110011)                               ? out_ari   : //arithmetic
@@ -252,11 +252,11 @@ module ari_imm(out, halt, imm_I, DataRS1, funct3);
                             funct3[1] ?
                                 funct3[0] ? 32'b0 //011, not valid
                                 : 
-                                            {31{1'b0}, out_slti} //010, SLTI
+                                            {{31{1'b0}}, out_slti} //010, SLTI
                             :
                                 funct3[0] ? DataRS1 << imm_I[4:0] //001, SLLI
                                 : 
-                                            DataRS1 + imm_I //000, ADDI
+                                            DataRS1 + imm_I; //000, ADDI
 
     assign halt =   (funct3 == 3'b011) ||
                     ((funct3 == 3'b001) & (imm_I[11:5] != 7'b0)) ||
@@ -285,7 +285,7 @@ module arithmetic(out, halt, DataRS1, DataRS2, funct3, funct7);
     output [31:0] out;
     output halt;
     
-    wire [31:0] out_slt, out_sra
+    wire [31:0] out_slt, out_sra;
     
     assign out = funct3[2] ?
                         funct3[1] ?
@@ -309,7 +309,7 @@ module arithmetic(out, halt, DataRS1, DataRS2, funct3, funct7);
                             :
                                 funct7 == 7'b0000000 ? DataRS1 + DataRS2 //000, ADD
                                 :
-                                    DataRS1 - DataRS2 //000, SUB
+                                    DataRS1 - DataRS2; //000, SUB
 
     assign halt =   ((funct3 == 3'b111) & (funct7 != 7'b0)) ||
                     (funct3 == 3'b110 & (funct7 != 7'b0)) || 
@@ -318,7 +318,7 @@ module arithmetic(out, halt, DataRS1, DataRS2, funct3, funct7);
                     ((funct3 == 3'b011) & (funct7 != 7'b0)) || 
                     ((funct3 == 3'b010) & (funct7 != 7'b0)) || 
                     ((funct3 == 3'b001) & (funct7 != 7'b0)) || 
-                    ((funct3 == 3'b000) & {funct7[6], funct7[4:0]} != 6'b0)
+                    ((funct3 == 3'b000) & {funct7[6], funct7[4:0]} != 6'b0);
 
     signed_lt slt0 (out_slt, DataRS1, DataRS2); //signed less than module
     arithmetic_right_shift ars0 (DataRS1, DataRS2, out_sra); //arithmetic right shift module
@@ -354,7 +354,7 @@ module pc_update(out, halt, PC, imm_SB, imm_UJ, JALR_add_rs1_immI, opcode, funct
     input [6:0] opcode;
     input [2:0] funct3;
     input [31:0] PC, rs1, rs2;
-    input [31:0] imm_SB, imm_UJ, JALR_add_rs1_immI
+    input [31:0] imm_SB, imm_UJ, JALR_add_rs1_immI;
 
     wire branch, halt_branch;
 
@@ -408,7 +408,7 @@ module SingleCycleCPU(halt, clk, rst);
 
     //data wires/reg
     wire [31:0] InstWord;
-    wire [31:0] DataAddr, DataInM, DataOutM
+    wire [31:0] DataAddr, DataInM, DataOutM;
     wire [31:0]  DataRS1, DataRS2, DataInRd;
     wire DWEN, RWEN;
 
@@ -417,18 +417,9 @@ module SingleCycleCPU(halt, clk, rst);
             //rst, set everything to zero
             PC <= 0;
 
-            DWEN <= 0;
-            RWEN <= 0;
-
-            halt <= 0;
-            
-            DataAddr <= 0;
-            DataInM <= 0;
-            DataInRd <= 0;
-
         end
         
-        else if (halt) //breaks computer if halt asserted
+        else if (halt) begin end //breaks computer if halt asserted
         
         else begin
 
