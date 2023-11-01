@@ -195,9 +195,9 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
                     (opcode == 7'b0100011)  ? halt_store            : //stores
                     (opcode == 7'b0010011)  ? halt_ari_i            : //immediate arithmetic
                     (opcode == 7'b0110011)  ? halt_ari              : //arithmetic
-                    1'b0;
+                    1'b1;                                             //unrecognized opcode
     
-    assign halt = halt_opcodes & halt_effective_addr & halt_pc_up; //halt if opcode not recognized, effective address not aligned or PC update halts
+    assign halt = halt_opcodes | halt_effective_addr | halt_pc_up; //halt if opcode not recognized, effective address not aligned or PC update halts
     
     assign RWEN =   ((opcode == 7'b0110111) || (opcode == 7'b0010111))   ? 1 & !halt : //upper immediate
                     ((opcode == 7'b1101111) || (opcode == 7'b1100111))   ? 1 & !halt : //JAL and JALR
