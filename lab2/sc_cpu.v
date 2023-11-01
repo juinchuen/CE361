@@ -190,7 +190,8 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
                         32'b0;
 
     assign halt_opcodes =   
-                    (opcode == 7'b1100111)  ? (funct3 != 3'b000)    : //JAL and JALR
+                    (opcode == 7'b1100111)  ? (funct3 != 3'b000)    : //JALR
+                    (opcode == 7'b1101111)  ? 0                     : //JAL
                     (opcode == 7'b0000011)  ? halt_load             : //loads
                     (opcode == 7'b0100011)  ? halt_store            : //stores
                     (opcode == 7'b0010011)  ? halt_ari_i            : //immediate arithmetic
