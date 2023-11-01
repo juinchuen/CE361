@@ -157,7 +157,7 @@ module effective_addr(EffectiveDataAddr, DataAddr, halt, opcode, func3, imm_S, i
 
 endmodule
 
-module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, imm_U, imm_I, imm_SB, imm_UJ, DataOutM, PC_curr, opcode, funct3, funct7, DataRS1, DataRS2);
+module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, imm_U, imm_I, imm_SB, imm_UJ, imm_S, DataOutM, PC_curr, opcode, funct3, funct7, DataRS1, DataRS2);
     //combinational module to generate what is written to reg file
 
     output [31:0]   DataInRd;           //data to be written to register file
@@ -167,7 +167,7 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     output          halt;
     output [31:0]   PC_next;            //next PC value
 
-    input [31:0] imm_U, imm_I, imm_SB, imm_UJ;
+    input [31:0] imm_U, imm_I, imm_SB, imm_UJ, imm_S;
     input [31:0] PC_curr;
     input [6:0] opcode;
     input [2:0] funct3;
@@ -219,7 +219,7 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     store_extend se0 (out_store, halt_store, DataRS2, funct3); //stores
     ari_imm     ai0 (out_ari_i, halt_ari_i, imm_I, DataRS1, funct3); //immediate arithmetic
     arithmetic  ar0 (out_ari, halt_ari, DataRS1, DataRS2, funct3, funct7); //arithmetic
-    effective_addr  ea0 (EffectiveDataAddr, halt_effective_addr, DataAddr, opcode, funct3); //effective address for loads and stores
+    effective_addr  ea0 (EffectiveDataAddr, DataAddr, halt_effective_addr,  opcode, funct3, imm_S, imm_I); //effective address for loads and stores
     pc_update   pc_up0 (PC_next, halt_pc_up, PC_curr, imm_SB, imm_UJ, JALR_add_rs1_immI, opcode, funct3, DataRS1, DataRS2); //updates PC
 
 endmodule
@@ -286,6 +286,10 @@ module arithmetic(out, halt, DataRS1, DataRS2, funct3, funct7);
     output halt;
     
     wire [31:0] out_slt, out_sra;
+
+    wire out_slt_bool;
+
+    assign out_slt = out_slt_bool ? 32'b1 : 32'b0;
     
     assign out = funct3[2] ?
                         funct3[1] ?
@@ -320,7 +324,7 @@ module arithmetic(out, halt, DataRS1, DataRS2, funct3, funct7);
                     ((funct3 == 3'b001) & (funct7 != 7'b0)) || 
                     ((funct3 == 3'b000) & {funct7[6], funct7[4:0]} != 6'b0);
 
-    signed_lt slt0 (out_slt, DataRS1, DataRS2); //signed less than module
+    signed_lt slt0 (out_slt_bool, DataRS1, DataRS2); //signed less than module
     arithmetic_right_shift ars0 (DataRS1, DataRS2, out_sra); //arithmetic right shift module
 
 endmodule
@@ -362,7 +366,7 @@ module pc_update(out, halt, PC, imm_SB, imm_UJ, JALR_add_rs1_immI, opcode, funct
                         PC + imm_UJ // JAL
                     :
                         (opcode == 7'b1100111) ?
-                            PC + {JALR_add_rs1_immI[31:1], 0} // JALR
+                            PC + {JALR_add_rs1_immI[31:1], 1'b0} // JALR
                         :
                             (opcode == 7'b1100011) ?
                                 branch ? 
@@ -433,6 +437,6 @@ module SingleCycleCPU(halt, clk, rst);
     InstMem         IMEM    (PC, `SIZE_WORD, InstWord, clk);
     DataMem         DMEM    (DataAddr, funct3[1:0], DataInM, DataOutM, DWEN, clk);
     RegFile         RF      (rs1, DataRS1, rs2, DataRS2, rd, DataInRd, RWEN, clk);
-    register_write  rw0     (DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, imm_I, imm_SB, imm_UJ, DataOutM, PC, opcode, funct3, funct7, DataRS1, DataRS2);
+    register_write  rw0     (DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, imm_U, imm_I, imm_SB, imm_UJ, imm_S, DataOutM, PC, opcode, funct3, funct7, DataRS1, DataRS2);
 
 endmodule
