@@ -1,4 +1,5 @@
 // Testbench for Northwestern - CompEng 361 - Lab2
+`include "sc_cpu.v"
 
 module tb;
    reg clk, rst;
@@ -24,7 +25,7 @@ module tb;
       #0 $readmemh("regs_in.hex", CPU.RF.Mem);
 
       // Feel free to modify to inspect whatever you want
-      #0 $monitor($time,, "PC=%08x IR=%08x", CPU.PC, CPU.InstWord);
+      #0 $monitor($time,, "PC=%08x IR=%08x RS1=%08X RS2=%08X RD=%08X", CPU.PC, CPU.InstWord, CPU.DataRS1, CPU.DataRS2, CPU.DataInRd);
 
       // Exits when halt is asserted
       wait(halt);
