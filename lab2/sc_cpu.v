@@ -118,20 +118,6 @@ module store_extend(out, halt, DataRS2, funct3);
 
 endmodule
 
-// module addr_is_aligned(halt, addr, func3);
-//     //asserts halt if address is not aligned
-
-//     input [31:0] addr;
-//     input [2:0] func3;
-//     output halt;
-
-//     assign halt = (func3[1:0] == 2'b00) ? 1'b0 : // byte aligned
-//                   (func3[1:0] == 2'b01) ? (addr[0] != 1'b0) : // half word aligned
-//                   (func3[1:0] == 2'b10) ? (addr[1:0] != 2'b00) : // word aligned
-//                   1'b0; // other cases, don't halt
-
-// endmodule
-
 module effective_addr(EffectiveDataAddr, halt, DataRS1, imm_S, imm_I, opcode, func3);
     // calculate effective address for loads and stores
     // asserts halt if address is not appropriately aligned for loads and stores
@@ -157,8 +143,6 @@ module effective_addr(EffectiveDataAddr, halt, DataRS1, imm_S, imm_I, opcode, fu
 
     assign halt =   (opcode == 7'b0100011 || opcode == 7'b0000011) ? halt_alignment : //stores and loads
                     1'b0; //other cases, don't halt
-    
-    // addr_is_aligned aia0 (.halt(halt_alignment), .addr(EffectiveDataAddr), .func3(func3)); //asserts halt if address is not aligned
 
 endmodule
 
@@ -206,9 +190,6 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
                     (opcode == 7'b0010111)  ? 0                                     : //AUIPC
                     (opcode == 7'b1100011)  ? halt_branch                           : //branch
                     1'b1;                                             //unrecognized opcode
-    
-    // assign halt = (opcode == 7'b0000011 || opcode == 7'b0100011) ? halt_opcodes || halt_pc_up  : //loads and stores
-    //               halt_opcodes || halt_pc_up; //other cases
     
     // RWEN is neg assert
     assign RWEN = !(((opcode == 7'b0110111) || (opcode == 7'b0010111))      ? !halt : //upper immediate
