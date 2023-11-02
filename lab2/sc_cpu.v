@@ -235,9 +235,9 @@ module ari_imm(out, halt, imm_I, DataRS1, funct3);
                             funct3[1] ?
                                 funct3[0] ? DataRS1 & imm_I //111, ANDI
                                 : 
-                                            DataRS1 || imm_I //110, ORI
+                                            DataRS1 | imm_I //110, ORI
                             :
-                                funct3[0] ?     (imm_I[11:5] == 7'b0) ? DataRS1 >> imm_I[4:0] //101, SRLI
+                                funct3[0] ?     (imm_I[11:5] == 7'b0000000) ? DataRS1 >> imm_I[4:0] //101, SRLI
                                                 : 
                                                                         out_srai //101, SRAI
                                 : 
@@ -253,7 +253,7 @@ module ari_imm(out, halt, imm_I, DataRS1, funct3);
                                             DataRS1 + imm_I ; //000, ADDI
 
     assign halt =   (funct3 == 3'b011) ||
-                    ((funct3 == 3'b001) & (imm_I[11:5] != 7'b0)) ||
+                    ((funct3 == 3'b001) & (imm_I[11:5] != 7'b0000000)) ||
                     ((funct3 == 3'b101) & ({imm_I[11], imm_I[9:5]} != 6'b000000));
                     
     signed_lt               slt0 (.out(out_slti), .opA(DataRS1), .opB(imm_I)); //signed less than module
@@ -266,7 +266,7 @@ module arithmetic_right_shift (opA, opB, out);
    input [31:0] opA, opB;
    output [31:0] out;
 
-   assign out = opA[31] ?   ((opA >> opB[4:0]) || (~(32'hffffffff >> opB[4:0])))
+   assign out = opA[31] ?   ((opA >> opB[4:0]) | (~(32'hffffffff >> opB[4:0])))
                 : 
                             (opA >> opB[4:0]);
 
@@ -286,7 +286,7 @@ module arithmetic(out, halt, DataRS1, DataRS2, funct3, funct7);
                         funct3[1] ?
                             funct3[0] ? DataRS1 & DataRS2 //111, AND
                             :
-                                DataRS1 || DataRS2 //110, OR
+                                DataRS1 | DataRS2 //110, OR
                         :
                             funct3[0] ? 
                                 funct7 == 7'b0000000 ? DataRS1 >> DataRS2[4:0] //101, SRL
@@ -306,14 +306,14 @@ module arithmetic(out, halt, DataRS1, DataRS2, funct3, funct7);
                                 :
                                     DataRS1 - DataRS2 ; //000, SUB
 
-    assign halt =   ((funct3 == 3'b111) & (funct7 != 7'b0)) ||
-                    (funct3 == 3'b110 & (funct7 != 7'b0)) || 
-                    ((funct3 == 3'b101) & {funct7[6], funct7[4:0]} != 6'b0) ||
-                    ((funct3 == 3'b100) & (funct7 != 7'b0)) || 
-                    ((funct3 == 3'b011) & (funct7 != 7'b0)) || 
-                    ((funct3 == 3'b010) & (funct7 != 7'b0)) || 
-                    ((funct3 == 3'b001) & (funct7 != 7'b0)) || 
-                    ((funct3 == 3'b000) & {funct7[6], funct7[4:0]} != 6'b0) ;
+    assign halt =   ((funct3 == 3'b111) & (funct7 != 7'b0000000)) ||
+                    (funct3 == 3'b110 & (funct7 != 7'b0000000)) || 
+                    ((funct3 == 3'b101) & {funct7[6], funct7[4:0]} != 6'b000000) ||
+                    ((funct3 == 3'b100) & (funct7 != 7'b0000000)) || 
+                    ((funct3 == 3'b011) & (funct7 != 7'b0000000)) || 
+                    ((funct3 == 3'b010) & (funct7 != 7'b0000000)) || 
+                    ((funct3 == 3'b001) & (funct7 != 7'b0000000)) || 
+                    ((funct3 == 3'b000) & {funct7[6], funct7[4:0]} != 6'b000000) ;
 
     signed_lt               slt0 (.out(out_slt), .opA(DataRS1), .opB(DataRS2)); //signed less than module
     arithmetic_right_shift  ars0 (.opA(DataRS1), .opB(DataRS2), .out(out_sra)); //arithmetic right shift module
