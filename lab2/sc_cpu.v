@@ -74,9 +74,9 @@ module load_extend(out, halt, mem_val, funct3);
                             : 
                                         mem_val //010, LW
                         :
-                            funct3[0] ? mem_val[15] ? {16'b1, mem_val[15:0]} : {16'b0, mem_val[15:0]} //001, LH
+                            funct3[0] ? mem_val[15] ? {16'hFFFF, mem_val[15:0]} : {16'h0000, mem_val[15:0]} //001, LH
                             : 
-                                        mem_val[7] ? {24'b1, mem_val[7:0]} : {24'b0, mem_val[7:0]} ; //000, LB
+                                        mem_val[7] ? {24'hFFFFFF, mem_val[7:0]} : {24'h000000, mem_val[7:0]} ; //000, LB
 
     assign halt =   (funct3 == 3'b011) ||
                     (funct3 == 3'b110) ||
@@ -108,9 +108,9 @@ module store_extend(out, halt, DataRS2, funct3);
                         :
                             DataRS2 //010, SW
                     :
-                        funct3[0] ? DataRS2[15] ? {16'b1, DataRS2[15:0]} : {16'b0, DataRS2[15:0]} //001, SH
+                        funct3[0] ? DataRS2[15] ? {16'hFFFF, DataRS2[15:0]} : {16'h0000, DataRS2[15:0]} //001, SH
                         :
-                            DataRS2[7] ? {24'b1, DataRS2[7:0]} : {24'b0, DataRS2[7:0]} ; //000, SB
+                            DataRS2[7] ? {24'hFFFFFF, DataRS2[7:0]} : {24'h000000, DataRS2[7:0]} ; //000, SB
 
     assign halt =   !((funct3 == 3'b000) ||
                       (funct3 == 3'b001) ||
@@ -118,41 +118,47 @@ module store_extend(out, halt, DataRS2, funct3);
 
 endmodule
 
-module addr_is_aligned(halt, addr, func3);
-    //asserts halt if address is not aligned
+// module addr_is_aligned(halt, addr, func3);
+//     //asserts halt if address is not aligned
 
-    input [31:0] addr;
-    input [2:0] func3;
-    output halt;
+//     input [31:0] addr;
+//     input [2:0] func3;
+//     output halt;
 
-    assign halt = (func3 == 3'b00) ? 1'b0 : // byte aligned
-                  (func3 == 3'b01) ? (addr[0] != 1'b0) : // half word aligned
-                  (func3 == 3'b10) ? (addr[1:0] != 2'b00) : // word aligned
-                  1'b0; // other cases, don't halt
+//     assign halt = (func3[1:0] == 2'b00) ? 1'b0 : // byte aligned
+//                   (func3[1:0] == 2'b01) ? (addr[0] != 1'b0) : // half word aligned
+//                   (func3[1:0] == 2'b10) ? (addr[1:0] != 2'b00) : // word aligned
+//                   1'b0; // other cases, don't halt
 
-endmodule
+// endmodule
 
-module effective_addr(EffectiveDataAddr, halt, DataAddr, imm_S, imm_I, opcode, func3);
+module effective_addr(EffectiveDataAddr, halt, DataRS1, imm_S, imm_I, opcode, func3);
     // calculate effective address for loads and stores
     // asserts halt if address is not appropriately aligned for loads and stores
 
     output [31:0] EffectiveDataAddr;
     output halt;
 
-    input [31:0] DataAddr, imm_S, imm_I;
+    input [31:0] DataRS1, imm_S, imm_I;
     input [6:0] opcode;
     input [2:0] func3;
 
-    wire halt_alignment;
+    // wire halt_alignment;
 
-    assign EffectiveDataAddr =   (opcode == 7'b0100011) ? DataAddr + imm_S : //stores
-                                 (opcode == 7'b0000011) ? DataAddr + imm_I: //loads
+    assign EffectiveDataAddr =   (opcode == 7'b0100011) ? DataRS1 + imm_S : //stores
+                                 (opcode == 7'b0000011) ? DataRS1 + imm_I: //loads
                                  32'b0;
     
+    
+    assign halt_alignment = (func3[1:0] == 2'b00) ? 1'b0 : // byte aligned
+                            (func3[1:0] == 2'b01) ? (EffectiveDataAddr[0] != 1'b0) : // half word aligned
+                            (func3[1:0] == 2'b10) ? (EffectiveDataAddr[1:0] != 2'b00) : // word aligned
+                            1'b0; // other cases, don't halt
+
     assign halt =   (opcode == 7'b0100011 || opcode == 7'b0000011) ? halt_alignment : //stores and loads
                     1'b0; //other cases, don't halt
-
-    addr_is_aligned aia0 (.halt(halt_alignment), .addr(EffectiveDataAddr), .func3(func3)); //asserts halt if address is not aligned
+    
+    // addr_is_aligned aia0 (.halt(halt_alignment), .addr(EffectiveDataAddr), .func3(func3)); //asserts halt if address is not aligned
 
 endmodule
 
@@ -175,7 +181,7 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     input [31:0] DataOutM;
 
     wire [31:0] out_ui, out_load, out_ari_i, out_ari, out_store, DataAddrStore;
-    wire halt_load, halt_store, halt_ari_i, halt_ari, halt_pc_up, halt_opcodes, halt_effective_addr;
+    wire halt_load, halt_store, halt_ari_i, halt_ari, halt_branch, halt_effective_addr;
     wire DWEN_temp;
     wire [31:0] JALR_add_rs1_immI;
     wire [31:0] EffectiveDataAddr;
@@ -189,20 +195,20 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
                         (opcode == 7'b0110011)                               ? out_ari   : //arithmetic
                         32'b0;
 
-    assign halt_opcodes =   
-                    (opcode == 7'b1100111)  ? (funct3 != 3'b000)    : //JALR
-                    (opcode == 7'b1101111)  ? 0                     : //JAL
-                    (opcode == 7'b0000011)  ? halt_load             : //loads
-                    (opcode == 7'b0100011)  ? halt_store            : //stores
-                    (opcode == 7'b0010011)  ? halt_ari_i            : //immediate arithmetic
-                    (opcode == 7'b0110011)  ? halt_ari              : //arithmetic
-                    (opcode == 7'b0110111)  ? 0                     : //LUI
-                    (opcode == 7'b0010111)  ? 0                     : //AUIPC
-                    (opcode == 7'b1100011)  ? 0                     : //branch
+    assign halt =   
+                    (opcode == 7'b1100111)  ? (funct3 != 3'b000)                    : //JALR
+                    (opcode == 7'b1101111)  ? 0                                     : //JAL
+                    (opcode == 7'b0000011)  ? halt_load || halt_effective_addr      : //loads
+                    (opcode == 7'b0100011)  ? halt_store || halt_effective_addr     : //stores
+                    (opcode == 7'b0010011)  ? halt_ari_i                            : //immediate arithmetic
+                    (opcode == 7'b0110011)  ? halt_ari                              : //arithmetic
+                    (opcode == 7'b0110111)  ? 0                                     : //LUI
+                    (opcode == 7'b0010111)  ? 0                                     : //AUIPC
+                    (opcode == 7'b1100011)  ? halt_branch                           : //branch
                     1'b1;                                             //unrecognized opcode
     
-    assign halt = (opcode == 7'b0000011 || opcode == 7'b0100011) ? halt_opcodes || halt_pc_up || halt_effective_addr : //loads and stores
-                  halt_opcodes || halt_pc_up; //other cases
+    // assign halt = (opcode == 7'b0000011 || opcode == 7'b0100011) ? halt_opcodes || halt_pc_up  : //loads and stores
+    //               halt_opcodes || halt_pc_up; //other cases
     
     // RWEN is neg assert
     assign RWEN = !(((opcode == 7'b0110111) || (opcode == 7'b0010111))    ? !halt : //upper immediate
@@ -226,8 +232,8 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     store_extend    se0 (.out(out_store), .halt(halt_store), .DataRS2(DataRS2), .funct3(funct3)); //stores
     ari_imm         ai0 (.out(out_ari_i), .halt(halt_ari_i), .imm_I(imm_I), .DataRS1(DataRS1), .funct3(funct3)); //immediate arithmetic
     arithmetic      ar0 (.out(out_ari), .halt(halt_ari), .DataRS1(DataRS1), .DataRS2(DataRS2), .funct3(funct3), .funct7(funct7)); //arithmetic
-    effective_addr  ea0 (.EffectiveDataAddr(EffectiveDataAddr), .halt(halt_effective_addr), .DataAddr(DataAddr), .imm_S(imm_S), .imm_I(imm_I), .opcode(opcode), .func3(funct3)); //effective address
-    pc_update       pc_up0 (.out(PC_next), .halt(halt_pc_up), .PC(PC_curr), .imm_SB(imm_SB), .imm_UJ(imm_UJ), .JALR_add_rs1_immI(JALR_add_rs1_immI), .opcode(opcode), .funct3(funct3), .rs1(DataRS1), .rs2(DataRS2)); //PC update
+    effective_addr  ea0 (.EffectiveDataAddr(EffectiveDataAddr), .halt(halt_effective_addr), .DataRS1(DataRS1), .imm_S(imm_S), .imm_I(imm_I), .opcode(opcode), .func3(funct3)); //effective address
+    pc_update       pc_up0 (.out(PC_next), .halt_branch(halt_branch), .PC(PC_curr), .imm_SB(imm_SB), .imm_UJ(imm_UJ), .JALR_add_rs1_immI(JALR_add_rs1_immI), .opcode(opcode), .funct3(funct3), .rs1(DataRS1), .rs2(DataRS2)); //PC update
 
 endmodule
 
@@ -352,12 +358,12 @@ module upper_imm(out, imm_U, PC, opcode);
 
 endmodule
 
-module pc_update(out, halt, PC, imm_SB, imm_UJ, JALR_add_rs1_immI, opcode, funct3, rs1, rs2);
+module pc_update(out, halt_branch, PC, imm_SB, imm_UJ, JALR_add_rs1_immI, opcode, funct3, rs1, rs2);
     
     //updates PC based on opcode
 
     output [31:0] out;
-    output halt;
+    output halt_branch;
 
     input [6:0] opcode;
     input [2:0] funct3;
@@ -379,16 +385,18 @@ module pc_update(out, halt, PC, imm_SB, imm_UJ, JALR_add_rs1_immI, opcode, funct
                             :
                                 PC ; // DO NOT INCREMENT PC if opcode not recognized
 
-    assign halt =   !((opcode == 7'b1101111) || //JAL
-                      (opcode == 7'b1100111) || //JALR
-                      (opcode == 7'b1100011) || //branch
-                      (opcode == 7'b0110011) || //arithmetic
-                      (opcode == 7'b0010011) || //immediate arithmetic
-                      (opcode == 7'b0000011) || //loads
-                      (opcode == 7'b0100011) || //stores
-                      (opcode == 7'b0010111) || //AUIPC
-                      (opcode == 7'b0110111))|| //LUI
-                      halt_branch;        
+    // assign halt_opcodes = !((opcode == 7'b1101111) || //JAL
+    //                         (opcode == 7'b1100111) || //JALR
+    //                         (opcode == 7'b1100011) || //branch
+    //                         (opcode == 7'b0110011) || //arithmetic
+    //                         (opcode == 7'b0010011) || //immediate arithmetic
+    //                         (opcode == 7'b0000011) || //loads
+    //                         (opcode == 7'b0100011) || //stores
+    //                         (opcode == 7'b0010111) || //AUIPC
+    //                         (opcode == 7'b0110111));  //LUI 
+    
+    // assign halt = (opcode == 7'b1100011) ? halt_branch : //branch
+    //               halt_opcodes; //other cases
 
     branch_flag bf0 (.branch(branch), .halt(halt_branch), .funct3(funct3), .opA(rs1), .opB(rs2)); //branch flag module                   
 endmodule
@@ -417,6 +425,9 @@ module SingleCycleCPU(halt, clk, rst);
     wire [31:0] DataAddr, DataInM, DataOutM;
     wire [31:0]  DataRS1, DataRS2, DataInRd;
     wire DWEN, RWEN;
+
+    wire [1:0] DataSize;
+    assign DataSize = funct3[1:0];
 
     always @ (negedge clk or negedge rst) begin
         if (!rst) begin
@@ -447,7 +458,7 @@ module SingleCycleCPU(halt, clk, rst);
 
     InstMem         IMEM    (.Addr(PC), .Size(`SIZE_WORD), .DataOut(InstWord), .CLK(clk)); //instruction memory
     Parse           p0      (.ins(InstWord), .funct7(funct7), .rs2(rs2), .rs1(rs1), .funct3(funct3), .rd(rd), .opcode(opcode), .imm_I(imm_I), .imm_S(imm_S), .imm_SB(imm_SB), .imm_U(imm_U), .imm_UJ(imm_UJ)); //parses instruction
-    DataMem         DMEM    (.Addr(DataAddr), .Size(`SIZE_WORD), .DataIn(DataInM), .DataOut(DataOutM), .WEN(DWEN), .CLK(clk)); //data memory
+    DataMem         DMEM    (.Addr(DataAddr), .Size(DataSize), .DataIn(DataInM), .DataOut(DataOutM), .WEN(DWEN), .CLK(clk)); //data memory
     RegFile         RF      (.AddrA(rs1), .DataOutA(DataRS1), .AddrB(rs2), .DataOutB(DataRS2), .AddrW(rd), .DataInW(DataInRd), .WenW(RWEN), .CLK(clk)); //register file
     register_write  rw0     (.DataInRd(DataInRd), .RWEN(RWEN), .DataAddr(DataAddr), .DWEN(DWEN), .DataInM(DataInM), .halt(halt), .PC_next(PC_next), .imm_I(imm_I), .imm_S(imm_S), .imm_SB(imm_SB), .imm_U(imm_U), .imm_UJ(imm_UJ), .DataOutM(DataOutM), .PC_curr(PC), .opcode(opcode), .funct3(funct3), .funct7(funct7), .DataRS1(DataRS1), .DataRS2(DataRS2)); //register write
 
