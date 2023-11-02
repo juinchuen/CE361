@@ -65,9 +65,9 @@ module load_extend(out, halt, mem_val, funct3);
                             : 
                                         32'b0 //110
                         :
-                            funct3[0] ? {16'b0, mem_val[15:0]} //101, LHU
+                            funct3[0] ? {16'h0000, mem_val[15:0]} //101, LHU
                             : 
-                                        {24'b0, mem_val[7:0]} //100, LBU
+                                        {24'h000000, mem_val[7:0]} //100, LBU
                     :
                         funct3[1] ?
                             funct3[0] ? 32'b0 //011
@@ -198,8 +198,8 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     assign halt =   
                     (opcode == 7'b1100111)  ? (funct3 != 3'b000)                    : //JALR
                     (opcode == 7'b1101111)  ? 0                                     : //JAL
-                    (opcode == 7'b0000011)  ? halt_load || halt_effective_addr      : //loads
-                    (opcode == 7'b0100011)  ? halt_store || halt_effective_addr     : //stores
+                    (opcode == 7'b0000011)  ? halt_load  ://|| halt_effective_addr   : //loads
+                    (opcode == 7'b0100011)  ? halt_store ://|| halt_effective_addr   : //stores
                     (opcode == 7'b0010011)  ? halt_ari_i                            : //immediate arithmetic
                     (opcode == 7'b0110011)  ? halt_ari                              : //arithmetic
                     (opcode == 7'b0110111)  ? 0                                     : //LUI
@@ -211,7 +211,7 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     //               halt_opcodes || halt_pc_up; //other cases
     
     // RWEN is neg assert
-    assign RWEN = !(((opcode == 7'b0110111) || (opcode == 7'b0010111))    ? !halt : //upper immediate
+    assign RWEN = !(((opcode == 7'b0110111) || (opcode == 7'b0010111))      ? !halt : //upper immediate
                     ((opcode == 7'b1101111) || (opcode == 7'b1100111))      ? !halt : //JAL and JALR
                     (opcode == 7'b0000011)                                  ? !halt : //loads
                     (opcode == 7'b0010011)                                  ? !halt : //immediate arithmetic
@@ -221,8 +221,8 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     assign DataAddr = EffectiveDataAddr; //address to be read from memory or written to memory
 
     // DWEN is neg assert
-    assign DWEN = (opcode == 7'b0100011) ? 1 & !halt : //stores
-                  0; 
+    assign DWEN = !((opcode == 7'b0100011) ? !halt : //stores
+                    0); 
 
     assign DataInM = ((opcode == 7'b0100011) ? out_store : //stores
                      32'b0); 

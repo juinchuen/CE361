@@ -25,7 +25,7 @@ module tb;
       #0 $readmemh("regs_in.hex", CPU.RF.Mem);
 
       // Feel free to modify to inspect whatever you want
-      #0 $monitor($time,, "PC=%08x IR=%08x rs1 = %d DRS1=%08X rs2 = %d DRS2=%08X  rd = %d DRD=%08X HALT=%b halt_load=%b halt_effective_addr=%b halt_branch=%b effective_add=%08x opcode=%7b func3=%3b DataOutM=%32b LoadReg=%32b", CPU.PC, CPU.InstWord, CPU.rs1, CPU.DataRS1, CPU.rs2, CPU.DataRS2, CPU.rd, CPU.DataInRd, halt, CPU.rw0.halt_load, CPU.rw0.halt_effective_addr, CPU.rw0.halt_branch, CPU.rw0.EffectiveDataAddr, CPU.opcode, CPU.funct3, CPU.DataOutM, CPU.DataInRd);
+      #0 $monitor($time,, "PC=%08x IR=%08x rs1 = %d DRS1=%08X rs2 = %d DRS2=%08X  rd = %d DRD=%08X HALT=%b halt_load=%b halt_effective_addr=%b halt_branch=%b effective_add=%08x opcode=%7b func3=%3b DataOutM=%08x LoadReg=%08x DataInMem=%08x DMemWr=%b DataAddr=%08x", CPU.PC, CPU.InstWord, CPU.rs1, CPU.DataRS1, CPU.rs2, CPU.DataRS2, CPU.rd, CPU.DataInRd, halt, CPU.rw0.halt_load, CPU.rw0.halt_effective_addr, CPU.rw0.halt_branch, CPU.rw0.EffectiveDataAddr, CPU.opcode, CPU.funct3, CPU.DataOutM, CPU.DataInRd, CPU.DataInM, CPU.DWEN, CPU.DataAddr);
 
       // Exits when halt is asserted
       wait(halt);
