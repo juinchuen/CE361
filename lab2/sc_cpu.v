@@ -1,8 +1,6 @@
 `include "lib_lab2.v"
 `include "parse.v"
 
- `default_nettype none
-
 `define SIZE_WORD  2'b10
 
 module signed_lt(out, opA, opB);  

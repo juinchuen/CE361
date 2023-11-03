@@ -22,4 +22,6 @@ add wave -noupdate -group INST -radix binary /tb/CPU/p0/*
 add wave -noupdate -group BRANCH -radix hexadecimal /tb/CPU/rw0/pc_up0/*
 add wave -noupdate -group BRANCH -radix hexadecimal /tb/CPU/rw0/pc_up0/bf0/*
 
+add wave -noupdate -group REGM -radix hexadecimal /tb/CPU/RF/Mem
+
 run -all
