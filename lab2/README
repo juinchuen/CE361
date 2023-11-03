@@ -1,3 +1,5 @@
 source /vol/eecs392/env/modelsim.env
 
 vsim -do acc.do
+
+test
