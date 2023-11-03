@@ -1,43 +1,23 @@
-// addi a0, zero, 2
-// add a1, a0, a0
-// sub a2, a1, a0
-// beq a1, a2, 8
-// sll a3, a1, a2
-// slli a4, a2, 30
-// bne a1, a1, 8
-// srai a5, a4, 30
-// blt a5, a1, 8
-// slt a6, a5, a0
-// sltu a7, a5, a0
-// bge a5, a1, 8
-// xor t0, a5, zero
-// addi t1, zero, 31
-// bltu a1, a5, 8
-// srl t2, t0, t1
-// sra t3, t0, t1
-// bgeu a1, a5, 8
-// or  t4, a5, zero
-// and t5, a5, zero
-13 05 20 00
-B3 05 A5 00
-33 86 A5 40
-63 84 C5 00
-B3 96 C5 00
-13 17 E6 01
-63 94 B5 00
-93 57 E7 41
-63 C4 B7 00
-33 A8 A7 00
-B3 B8 A7 00
-63 D4 B7 00
-B3 C2 07 00
-13 03 F0 01
-63 E4 F5 00
-B3 D3 62 00
-33 DE 62 40
-63 F4 F5 00
-B3 EE 07 00
-33 FF 07 00
+13 05 20 00 // addi a0, zero, 2
+B3 05 A5 00 // add a1, a0, a0
+33 86 A5 40 // sub a2, a1, a0
+63 84 C5 00 // beq a1, a2, 8
+B3 96 C5 00 // sll a3, a1, a2
+13 17 E6 01 // slli a4, a2, 30
+63 94 B5 00 // bne a1, a1, 8
+93 57 E7 41 // srai a5, a4, 30
+63 C4 B7 00 // blt a5, a1, 8
+33 A8 A7 00 // slt a6, a5, a0
+B3 B8 A7 00 // sltu a7, a5, a0
+63 D4 B7 00 // bge a5, a1, 8
+B3 C2 07 00 // xor t0, a5, zero
+13 03 F0 01 // addi t1, zero, 31
+63 E4 F5 00 // bltu a1, a5, 8
+B3 D3 62 00 // srl t2, t0, t1
+33 DE 62 40 // sra t3, t0, t1
+63 F4 F5 00 // bgeu a1, a5, 8
+B3 EE 07 00 // or  t4, a5, zero
+33 FF 07 00 // and t5, a5, zero
 00 00 00 00
 00 00 00 00
 00 00 00 00

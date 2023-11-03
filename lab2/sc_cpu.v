@@ -1,8 +1,6 @@
 `include "lib_lab2.v"
 `include "parse.v"
 
-`default_nettype none
-
 `define SIZE_WORD  2'b10
 
 module signed_lt(out, opA, opB);  
@@ -166,9 +164,8 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     input [31:0] DataRS1, DataRS2;
     input [31:0] DataOutM;
 
-    wire [31:0] out_ui, out_load, out_ari_i, out_ari, out_store, DataAddrStore;
+    wire [31:0] out_ui, out_load, out_ari_i, out_ari, out_store;
     wire halt_load, halt_store, halt_ari_i, halt_ari, halt_branch, halt_effective_addr;
-    wire DWEN_temp;
     wire [31:0] JALR_add_rs1_immI;
     wire [31:0] EffectiveDataAddr;
 
