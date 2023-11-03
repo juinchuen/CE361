@@ -1,0 +1,437 @@
+$date
+	Fri Nov  3 11:56:40 2023
+$end
+$version
+	Icarus Verilog
+$end
+$timescale
+	1s
+$end
+$scope module tb $end
+$var wire 1 ! halt $end
+$var reg 1 " clk $end
+$var reg 1 # rst $end
+$scope module CPU $end
+$var wire 1 " clk $end
+$var wire 1 # rst $end
+$var wire 5 $ rs2 [4:0] $end
+$var wire 5 % rs1 [4:0] $end
+$var wire 5 & rd [4:0] $end
+$var wire 7 ' opcode [6:0] $end
+$var wire 32 ( imm_UJ [31:0] $end
+$var wire 32 ) imm_U [31:0] $end
+$var wire 32 * imm_SB [31:0] $end
+$var wire 32 + imm_S [31:0] $end
+$var wire 32 , imm_I [31:0] $end
+$var wire 1 ! halt $end
+$var wire 7 - funct7 [6:0] $end
+$var wire 3 . funct3 [2:0] $end
+$var wire 1 / RWEN $end
+$var wire 32 0 PC_next [31:0] $end
+$var wire 32 1 InstWord [31:0] $end
+$var wire 2 2 DataSize [1:0] $end
+$var wire 32 3 DataRS2 [31:0] $end
+$var wire 32 4 DataRS1 [31:0] $end
+$var wire 32 5 DataOutM [31:0] $end
+$var wire 32 6 DataInRd [31:0] $end
+$var wire 32 7 DataInM [31:0] $end
+$var wire 32 8 DataAddr [31:0] $end
+$var wire 1 9 DWEN $end
+$var reg 32 : PC [31:0] $end
+$scope module DMEM $end
+$var wire 32 ; AddrH [31:0] $end
+$var wire 32 < AddrW [31:0] $end
+$var wire 1 " CLK $end
+$var wire 2 = Size [1:0] $end
+$var wire 1 9 WEN $end
+$var wire 32 > DataIn [31:0] $end
+$var wire 32 ? Addr [31:0] $end
+$var reg 32 @ DataOut [31:0] $end
+$upscope $end
+$scope module IMEM $end
+$var wire 32 A Addr [31:0] $end
+$var wire 32 B AddrW [31:0] $end
+$var wire 1 " CLK $end
+$var wire 2 C Size [1:0] $end
+$var reg 32 D DataOut [31:0] $end
+$upscope $end
+$scope module RF $end
+$var wire 1 " CLK $end
+$var wire 1 / WenW $end
+$var wire 32 E DataInW [31:0] $end
+$var wire 5 F AddrW [4:0] $end
+$var wire 5 G AddrB [4:0] $end
+$var wire 5 H AddrA [4:0] $end
+$var reg 32 I DataOutA [31:0] $end
+$var reg 32 J DataOutB [31:0] $end
+$upscope $end
+$scope module p0 $end
+$var wire 32 K ins [31:0] $end
+$var wire 5 L rs2 [4:0] $end
+$var wire 5 M rs1 [4:0] $end
+$var wire 5 N rd [4:0] $end
+$var wire 7 O opcode [6:0] $end
+$var wire 32 P imm_UJ [31:0] $end
+$var wire 32 Q imm_U [31:0] $end
+$var wire 32 R imm_SB [31:0] $end
+$var wire 32 S imm_S [31:0] $end
+$var wire 32 T imm_I [31:0] $end
+$var wire 7 U funct7 [6:0] $end
+$var wire 3 V funct3 [2:0] $end
+$upscope $end
+$scope module rw0 $end
+$var wire 32 W DataAddr [31:0] $end
+$var wire 32 X DataOutM [31:0] $end
+$var wire 32 Y DataRS1 [31:0] $end
+$var wire 32 Z DataRS2 [31:0] $end
+$var wire 32 [ PC_curr [31:0] $end
+$var wire 3 \ funct3 [2:0] $end
+$var wire 7 ] funct7 [6:0] $end
+$var wire 32 ^ imm_I [31:0] $end
+$var wire 32 _ imm_S [31:0] $end
+$var wire 32 ` imm_SB [31:0] $end
+$var wire 32 a imm_U [31:0] $end
+$var wire 32 b imm_UJ [31:0] $end
+$var wire 7 c opcode [6:0] $end
+$var wire 32 d out_ui [31:0] $end
+$var wire 32 e out_store [31:0] $end
+$var wire 32 f out_load [31:0] $end
+$var wire 32 g out_ari_i [31:0] $end
+$var wire 32 h out_ari [31:0] $end
+$var wire 1 i halt_store $end
+$var wire 1 j halt_load $end
+$var wire 1 k halt_effective_addr $end
+$var wire 1 l halt_branch $end
+$var wire 1 m halt_ari_i $end
+$var wire 1 n halt_ari $end
+$var wire 1 ! halt $end
+$var wire 1 / RWEN $end
+$var wire 32 o PC_next [31:0] $end
+$var wire 32 p JALR_add_rs1_immI [31:0] $end
+$var wire 32 q EffectiveDataAddr [31:0] $end
+$var wire 32 r DataInRd [31:0] $end
+$var wire 32 s DataInM [31:0] $end
+$var wire 1 9 DWEN $end
+$scope module ai0 $end
+$var wire 32 t DataRS1 [31:0] $end
+$var wire 3 u funct3 [2:0] $end
+$var wire 1 m halt $end
+$var wire 32 v imm_I [31:0] $end
+$var wire 32 w out_srai [31:0] $end
+$var wire 1 x out_slti $end
+$var wire 32 y out [31:0] $end
+$scope module ars0 $end
+$var wire 32 z opA [31:0] $end
+$var wire 32 { opB [31:0] $end
+$var wire 32 | out [31:0] $end
+$upscope $end
+$scope module slt0 $end
+$var wire 32 } opA [31:0] $end
+$var wire 32 ~ opB [31:0] $end
+$var wire 1 x out $end
+$upscope $end
+$upscope $end
+$scope module ar0 $end
+$var wire 32 !" DataRS1 [31:0] $end
+$var wire 32 "" DataRS2 [31:0] $end
+$var wire 3 #" funct3 [2:0] $end
+$var wire 7 $" funct7 [6:0] $end
+$var wire 1 n halt $end
+$var wire 32 %" out_sra [31:0] $end
+$var wire 1 &" out_slt $end
+$var wire 32 '" out [31:0] $end
+$scope module ars0 $end
+$var wire 32 (" opA [31:0] $end
+$var wire 32 )" opB [31:0] $end
+$var wire 32 *" out [31:0] $end
+$upscope $end
+$scope module slt0 $end
+$var wire 32 +" opA [31:0] $end
+$var wire 32 ," opB [31:0] $end
+$var wire 1 &" out $end
+$upscope $end
+$upscope $end
+$scope module ea0 $end
+$var wire 32 -" DataRS1 [31:0] $end
+$var wire 3 ." func3 [2:0] $end
+$var wire 32 /" imm_I [31:0] $end
+$var wire 32 0" imm_S [31:0] $end
+$var wire 7 1" opcode [6:0] $end
+$var wire 1 2" halt_alignment $end
+$var wire 1 k halt $end
+$var wire 32 3" EffectiveDataAddr [31:0] $end
+$upscope $end
+$scope module le0 $end
+$var wire 3 4" funct3 [2:0] $end
+$var wire 1 j halt $end
+$var wire 32 5" mem_val [31:0] $end
+$var wire 32 6" out [31:0] $end
+$upscope $end
+$scope module pc_up0 $end
+$var wire 32 7" JALR_add_rs1_immI [31:0] $end
+$var wire 32 8" PC [31:0] $end
+$var wire 3 9" funct3 [2:0] $end
+$var wire 32 :" imm_SB [31:0] $end
+$var wire 32 ;" imm_UJ [31:0] $end
+$var wire 7 <" opcode [6:0] $end
+$var wire 32 =" rs1 [31:0] $end
+$var wire 32 >" rs2 [31:0] $end
+$var wire 32 ?" out [31:0] $end
+$var wire 1 l halt_branch $end
+$var wire 1 @" branch $end
+$scope module bf0 $end
+$var wire 3 A" funct3 [2:0] $end
+$var wire 1 l halt $end
+$var wire 32 B" opA [31:0] $end
+$var wire 32 C" opB [31:0] $end
+$var wire 1 D" slt $end
+$var wire 1 @" branch $end
+$scope module slt0 $end
+$var wire 32 E" opA [31:0] $end
+$var wire 32 F" opB [31:0] $end
+$var wire 1 D" out $end
+$upscope $end
+$upscope $end
+$upscope $end
+$scope module se0 $end
+$var wire 32 G" DataRS2 [31:0] $end
+$var wire 3 H" funct3 [2:0] $end
+$var wire 32 I" out [31:0] $end
+$var wire 1 i halt $end
+$upscope $end
+$scope module ui0 $end
+$var wire 32 J" PC [31:0] $end
+$var wire 32 K" imm_U [31:0] $end
+$var wire 7 L" opcode [6:0] $end
+$var wire 32 M" out [31:0] $end
+$upscope $end
+$upscope $end
+$upscope $end
+$upscope $end
+$enddefinitions $end
+$comment Show the parameter values. $end
+$dumpall
+$end
+#0
+$dumpvars
+b0 M"
+b11 L"
+b100101000000000000000 K"
+b0 J"
+b0 I"
+b0 H"
+b0 G"
+b0 F"
+b0 E"
+0D"
+b0 C"
+b0 B"
+b0 A"
+1@"
+b100 ?"
+b0 >"
+b0 ="
+b11 <"
+b101000100000000000 ;"
+b100000001010 :"
+b0 9"
+b0 8"
+b1 7"
+b11111111111111111111111110000101 6"
+b10000101100001011000010110000101 5"
+b0 4"
+b1 3"
+02"
+b11 1"
+b1011 0"
+b1 /"
+b0 ."
+b0 -"
+b0 ,"
+b0 +"
+b0 *"
+b0 )"
+b0 ("
+b0 '"
+0&"
+b0 %"
+b0 $"
+b0 #"
+b0 ""
+b0 !"
+b1 ~
+b0 }
+b0 |
+b1 {
+b0 z
+b1 y
+1x
+b0 w
+b1 v
+b0 u
+b0 t
+b0 s
+b11111111111111111111111110000101 r
+b1 q
+b1 p
+b100 o
+0n
+0m
+0l
+0k
+0j
+0i
+b0 h
+b1 g
+b11111111111111111111111110000101 f
+b0 e
+b0 d
+b11 c
+b101000100000000000 b
+b100101000000000000000 a
+b100000001010 `
+b1011 _
+b1 ^
+b0 ]
+b0 \
+b0 [
+b0 Z
+b0 Y
+b10000101100001011000010110000101 X
+b1 W
+b0 V
+b0 U
+b1 T
+b1011 S
+b100000001010 R
+b100101000000000000000 Q
+b101000100000000000 P
+b11 O
+b1011 N
+b101 M
+b1 L
+b100101000010110000011 K
+b0 J
+b0 I
+b101 H
+b1 G
+b1011 F
+b11111111111111111111111110000101 E
+b100101000010110000011 D
+b10 C
+b0 B
+b0 A
+b10000101100001011000010110000101 @
+b1 ?
+b0 >
+b0 =
+b0 <
+b0 ;
+b0 :
+19
+b1 8
+b0 7
+b11111111111111111111111110000101 6
+b10000101100001011000010110000101 5
+b0 4
+b0 3
+b0 2
+b100101000010110000011 1
+b100 0
+0/
+b0 .
+b0 -
+b1 ,
+b1011 +
+b100000001010 *
+b100101000000000000000 )
+b101000100000000000 (
+b11 '
+b1011 &
+b101 %
+b1 $
+1#
+0"
+0!
+$end
+#5
+1"
+#10
+0/
+0!
+b10010 6
+b10010 E
+b10010 r
+b10010 f
+b10010 6"
+0k
+b0 g
+b0 y
+b10 ;
+02"
+b100100000000000010010 5
+b100100000000000010010 @
+b100100000000000010010 X
+b100100000000000010010 5"
+b10 8
+b10 ?
+b10 W
+b10 q
+b10 3"
+0@"
+b1 2
+b1 =
+b1000 0
+b1000 o
+b1000 ?"
+b1 .
+b1 V
+b1 \
+b1 u
+b1 #"
+b1 ."
+b1 4"
+b1 9"
+b1 A"
+b1 H"
+b10 $
+b10 G
+b10 L
+b1100 &
+b1100 F
+b1100 N
+b10 p
+b10 7"
+b10 ,
+b10 T
+b10 ^
+b10 v
+b10 {
+b10 ~
+b10 /"
+b1100 +
+b1100 S
+b1100 _
+b1100 0"
+b1100 *
+b1100 R
+b1100 `
+b1100 :"
+b1000101001000000000000 )
+b1000101001000000000000 Q
+b1000101001000000000000 a
+b1000101001000000000000 K"
+b101001000000000010 (
+b101001000000000010 P
+b101001000000000010 b
+b101001000000000010 ;"
+b1000101001011000000011 1
+b1000101001011000000011 D
+b1000101001011000000011 K
+b100 B
+b100 :
+b100 A
+b100 [
+b100 8"
+b100 J"
+0"

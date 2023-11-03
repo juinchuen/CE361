@@ -1,23 +1,3 @@
-// addi a0, zero, 2
-// add a1, a0, a0
-// sub a2, a1, a0
-// beq a1, a2, 8
-// sll a3, a1, a2
-// slli a4, a2, 30
-// bne a1, a1, 8
-// srai a5, a4, 30
-// blt a5, a1, 8
-// slt a6, a5, a0
-// sltu a7, a5, a0
-// bge a5, a1, 8
-// xor t0, a5, zero
-// addi t1, zero, 31
-// bltu a1, a5, 8
-// srl t2, t0, t1
-// sra t3, t0, t1
-// bgeu a1, a5, 8
-// or  t4, a5, zero
-// and t5, a5, zero
 13 05 20 00
 B3 05 A5 00
 33 86 A5 40

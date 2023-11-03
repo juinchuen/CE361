@@ -1,6 +1,8 @@
 `include "lib_lab2.v"
 `include "parse.v"
 
+`default_nettype none
+
 `define SIZE_WORD  2'b10
 
 module signed_lt(out, opA, opB);  
@@ -32,14 +34,19 @@ module branch_flag(branch, halt, funct3, opA, opB);
     wire beq, bne, blt, bge, bltu, bgeu, slt;
 
     // if opcode and inequality match, assert flag
-    assign beq  = (funct3 == 3'b000) & (opA == opB);
-    assign bne  = (funct3 == 3'b001) & (opA != opB);
-    assign blt  = (funct3 == 3'b100) & slt;
-    assign bge  = (funct3 == 3'b101) & !slt;
-    assign bltu = (funct3 == 3'b110) & (opA <  opB);
-    assign bgeu = (funct3 == 3'b111) & (opA >= opB);
-
-    assign branch = beq || bne || blt || bge || bltu || bgeu;
+    // assign beq  = (funct3 == 3'b000) & (opA == opB);
+    // assign bne  = (funct3 == 3'b001) & (opA != opB);
+    // assign blt  = (funct3 == 3'b100) & slt;
+    // assign bge  = (funct3 == 3'b101) & !slt;
+    // assign bltu = (funct3 == 3'b110) & (opA <  opB);
+    // assign bgeu = (funct3 == 3'b111) & (opA >= opB);
+    assign branch  = (funct3 == 3'b000) ? (opA == opB) : //beq
+                     (funct3 == 3'b001) ? (opA != opB) : //bne
+                     (funct3 == 3'b100) ? slt : //blt
+                     (funct3 == 3'b101) ? !slt : //bge
+                     (funct3 == 3'b110) ? (opA <  opB) : //bltu
+                     (funct3 == 3'b111) ? (opA >= opB) : //bgeu
+                     1'b0; //other cases, don't branch
     
     // assert halt if unrecognized funct 3
     assign halt = (funct3 == 3'b010) || (funct3 == 3'b011);
@@ -129,7 +136,7 @@ module effective_addr(EffectiveDataAddr, halt, DataRS1, imm_S, imm_I, opcode, fu
     input [6:0] opcode;
     input [2:0] func3;
 
-    // wire halt_alignment;
+    wire halt_alignment;
 
     assign EffectiveDataAddr =   (opcode == 7'b0100011) ? DataRS1 + imm_S : //stores
                                  (opcode == 7'b0000011) ? DataRS1 + imm_I: //loads
@@ -182,15 +189,16 @@ module register_write(DataInRd, RWEN, DataAddr, DWEN, DataInM, halt, PC_next, im
     assign halt =   
                     (opcode == 7'b1100111)  ? (funct3 != 3'b000)                    : //JALR
                     (opcode == 7'b1101111)  ? 0                                     : //JAL
-                    (opcode == 7'b0000011)  ? halt_load  ://|| halt_effective_addr   : //loads
-                    (opcode == 7'b0100011)  ? halt_store ://|| halt_effective_addr   : //stores
+                    (opcode == 7'b0000011)  ? halt_load  || halt_effective_addr   : //loads
+                    (opcode == 7'b0100011)  ? halt_store || halt_effective_addr   : //stores
                     (opcode == 7'b0010011)  ? halt_ari_i                            : //immediate arithmetic
                     (opcode == 7'b0110011)  ? halt_ari                              : //arithmetic
                     (opcode == 7'b0110111)  ? 0                                     : //LUI
                     (opcode == 7'b0010111)  ? 0                                     : //AUIPC
-                    (opcode == 7'b1100011)  ? halt_branch                           : //branch
-                    1'b1;                                             //unrecognized opcode
+                    (opcode == 7'b1100011)  ? halt_branch                          : //branch
+                    1;                                             //unrecognized opcode
     
+
     // RWEN is neg assert
     assign RWEN = !(((opcode == 7'b0110111) || (opcode == 7'b0010111))      ? !halt : //upper immediate
                     ((opcode == 7'b1101111) || (opcode == 7'b1100111))      ? !halt : //JAL and JALR
@@ -351,7 +359,7 @@ module pc_update(out, halt_branch, PC, imm_SB, imm_UJ, JALR_add_rs1_immI, opcode
     input [31:0] PC, rs1, rs2;
     input [31:0] imm_SB, imm_UJ, JALR_add_rs1_immI;
 
-    wire branch, halt_branch;
+    wire branch;
 
     assign out =    (opcode == 7'b1101111) ? PC + imm_UJ : // JAL
                     (opcode == 7'b1100111) ? PC + {JALR_add_rs1_immI[31:1], 1'b0} : // JALR
@@ -389,7 +397,6 @@ module SingleCycleCPU(halt, clk, rst);
     output halt;
     input clk, rst;
 
-
     //internal registers
     reg [31:0] PC; //aka program counter 
     wire [31:0] PC_next; // next PC value
@@ -406,6 +413,7 @@ module SingleCycleCPU(halt, clk, rst);
     wire [31:0] DataAddr, DataInM, DataOutM;
     wire [31:0]  DataRS1, DataRS2, DataInRd;
     wire DWEN, RWEN;
+    wire halt_trial;
 
     wire [1:0] DataSize;
     assign DataSize = funct3[1:0];
