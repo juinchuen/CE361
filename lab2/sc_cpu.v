@@ -34,19 +34,14 @@ module branch_flag(branch, halt, funct3, opA, opB);
     wire beq, bne, blt, bge, bltu, bgeu, slt;
 
     // if opcode and inequality match, assert flag
-    // assign beq  = (funct3 == 3'b000) & (opA == opB);
-    // assign bne  = (funct3 == 3'b001) & (opA != opB);
-    // assign blt  = (funct3 == 3'b100) & slt;
-    // assign bge  = (funct3 == 3'b101) & !slt;
-    // assign bltu = (funct3 == 3'b110) & (opA <  opB);
-    // assign bgeu = (funct3 == 3'b111) & (opA >= opB);
-    assign branch  = (funct3 == 3'b000) ? (opA == opB) : //beq
-                     (funct3 == 3'b001) ? (opA != opB) : //bne
-                     (funct3 == 3'b100) ? slt : //blt
-                     (funct3 == 3'b101) ? !slt : //bge
-                     (funct3 == 3'b110) ? (opA <  opB) : //bltu
-                     (funct3 == 3'b111) ? (opA >= opB) : //bgeu
-                     1'b0; //other cases, don't branch
+    assign beq  = (funct3 == 3'b000) & (opA == opB);
+    assign bne  = (funct3 == 3'b001) & (opA != opB);
+    assign blt  = (funct3 == 3'b100) & slt;
+    assign bge  = (funct3 == 3'b101) & !slt;
+    assign bltu = (funct3 == 3'b110) & (opA <  opB);
+    assign bgeu = (funct3 == 3'b111) & (opA >= opB);
+
+    assign branch = beq || bne || blt || bge || bltu || bgeu;
     
     // assert halt if unrecognized funct 3
     assign halt = (funct3 == 3'b010) || (funct3 == 3'b011);
@@ -81,9 +76,9 @@ module load_extend(out, halt, mem_val, funct3);
                             : 
                                         mem_val //010, LW
                         :
-                            funct3[0] ? mem_val[15] ? {16'hFFFF, mem_val[15:0]} : {16'h0000, mem_val[15:0]} //001, LH
+                            funct3[0] ? {{16{mem_val[15]}}, mem_val[15:0]} //001, LH
                             : 
-                                        mem_val[7] ? {24'hFFFFFF, mem_val[7:0]} : {24'h000000, mem_val[7:0]} ; //000, LB
+                                    {{24{mem_val[7]}}, mem_val[7:0]}; //000, LB
 
     assign halt =   (funct3 == 3'b011) ||
                     (funct3 == 3'b110) ||
@@ -115,9 +110,9 @@ module store_extend(out, halt, DataRS2, funct3);
                         :
                             DataRS2 //010, SW
                     :
-                        funct3[0] ? DataRS2[15] ? {16'hFFFF, DataRS2[15:0]} : {16'h0000, DataRS2[15:0]} //001, SH
+                        funct3[0] ? {{16{DataRS2[15]}}, DataRS2[15:0]} //001, SH
                         :
-                            DataRS2[7] ? {24'hFFFFFF, DataRS2[7:0]} : {24'h000000, DataRS2[7:0]} ; //000, SB
+                            {{24{DataRS2[7]}}, DataRS2[7:0]}; //000, SB
 
     assign halt =   !((funct3 == 3'b000) ||
                       (funct3 == 3'b001) ||
