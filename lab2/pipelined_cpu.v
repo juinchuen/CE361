@@ -467,7 +467,7 @@ module InstructionDecode(
     reg [31:0] ID_imm_U_reg;
     reg [31:0] ID_imm_UJ_reg;
     reg ID_RWEN_reg, ID_DWEN_reg, ID_MEMREAD_reg;
-    reg ID_PC_reg;
+    reg [31:0] ID_PC_reg;
     reg IF_stall_reg, EX_stall_reg;
 
     wire [6:0] funct7;
@@ -633,12 +633,12 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
     // Forwarding logic
     wire [31:0] DataRS1_forwarded, DataRS2_forwarded;
 
-    assign DataRS1_forwarded = (EX_RWEN_reg && (EX_rd_reg != 0) && (EX_rd_reg == ID_rs1)) ? EX_out : // Execute stage takes precedence over memory in case of forwarding
-                                (MEM_RWEN && (MEM_rd != 0) && (MEM_rd == ID_rs1)) ? MEM_out :
+    assign DataRS1_forwarded = (!EX_RWEN_reg && (EX_rd_reg != 0) && (EX_rd_reg == ID_rs1)) ? EX_out : // Execute stage takes precedence over memory in case of forwarding
+                                (!MEM_RWEN && (MEM_rd != 0) && (MEM_rd == ID_rs1)) ? MEM_out :
                                 ID_DataRS1;
     
-    assign DataRS2_forwarded = (EX_RWEN_reg && (EX_rd_reg != 0) && (EX_rd_reg == ID_rs2)) ? EX_out : // EXecute stage takes precedence over memory in case of forwarding
-                                (MEM_RWEN && (MEM_rd != 0) && (MEM_rd == ID_rs2)) ? MEM_out :
+    assign DataRS2_forwarded = (!EX_RWEN_reg && (EX_rd_reg != 0) && (EX_rd_reg == ID_rs2)) ? EX_out : // EXecute stage takes precedence over memory in case of forwarding
+                                (!MEM_RWEN && (MEM_rd != 0) && (MEM_rd == ID_rs2)) ? MEM_out :
                                 ID_DataRS2;
 
     assign halt_EX_internal =   (ID_opcode == 7'b0110011)                               ? halt_arithmetic       : //arithmetic
