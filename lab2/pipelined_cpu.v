@@ -429,7 +429,7 @@ module InstructionFetch(IF_InstData, PC, IF_PC, ID_stall, InstWord, clk, rst, ha
 endmodule
 
 module InstructionDecode(
-    IF_InstData, IF_PC, clk, EX_MEMREAD, EX_rd, halt_EX, halt_MEM, DataRS1, DataRS2, ID_stall, flush_pipeline, RF_rs1, RF_rs2, ID_DataRS1, ID_DataRS2,
+    IF_InstData, IF_PC, clk, EX_MEMREAD, EX_rd, halt_EX, halt_MEM, DataRS1, DataRS2, RF_DataInRd, RF_Rd, RF_WEN, ID_stall, flush_pipeline, RF_rs1, RF_rs2, ID_DataRS1, ID_DataRS2,
     ID_funct7, ID_rs1, ID_rs2, ID_rd, ID_funct3, ID_opcode, ID_imm_I, ID_imm_S, ID_imm_SB, ID_imm_U, ID_imm_UJ, ID_RWEN, ID_DWEN, ID_MEMREAD, ID_PC, IF_stall, EX_stall);
     // decodes instruction and calculates control signals
 
@@ -440,6 +440,9 @@ module InstructionDecode(
     input halt_EX;
     input halt_MEM;
     input [31:0] DataRS1, DataRS2;
+    input [31:0] RF_DataInRd;
+    input [4:0] RF_Rd;
+    input RF_WEN;
     input ID_stall, flush_pipeline;
 
     output [4:0] RF_rs1, RF_rs2;
@@ -484,6 +487,11 @@ module InstructionDecode(
     // Register file read logic
     assign RF_rs1 = rs1;
     assign RF_rs2 = rs2; 
+
+    // Forwarding logic
+    wire [31:0] DataRS1_forwarded, DataRS2_forwarded;
+    assign DataRS1_forwarded = (!RF_WEN && (RF_Rd != 0) && (RF_Rd == rs1)) ? RF_DataInRd : DataRS1;
+    assign DataRS2_forwarded = (!RF_WEN && (RF_Rd != 0) && (RF_Rd == rs2)) ? RF_DataInRd : DataRS2;
 
     // stall if EX_MEMREAD and EX_rd is not 0 and EX_rd is equal to rs1 or rs2
     assign load_stall = EX_MEMREAD && (EX_rd != 0) && (EX_rd == rs1 || EX_rd == rs2); // stall if EX_MEMREAD and EX_rd is not 0 and EX_rd is equal to rs1 or rs2
@@ -531,8 +539,8 @@ module InstructionDecode(
                 ID_RWEN_reg <= RWEN;
                 ID_DWEN_reg <= DWEN;
                 ID_MEMREAD_reg <= MEMREAD;
-                ID_DataRS1_reg <= DataRS1;
-                ID_DataRS2_reg <= DataRS2;
+                ID_DataRS1_reg <= DataRS1_forwarded;
+                ID_DataRS2_reg <= DataRS2_forwarded;
                 ID_funct7_reg <= funct7;
                 ID_rs1_reg <= rs1;
                 ID_rs2_reg <= rs2;
@@ -571,7 +579,7 @@ endmodule
 
 
 module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_target_addr, load_store_effective_addr, EX_DataRS2, EX_funct3, EX_opcode, EX_MEMREAD,
-                halt_EX, halt_MEM, clk, MEM_out, MEM_RWEN, MEM_rd, 
+                halt_EX_backward, halt_EX_forward, halt_MEM_backward, clk, MEM_out, MEM_RWEN, MEM_rd, 
                 ID_DataRS1, ID_DataRS2,
                 ID_funct7, ID_rs1, ID_rs2, ID_rd, ID_funct3, ID_opcode, ID_imm_I, ID_imm_S, ID_imm_SB, ID_imm_U, ID_imm_UJ, ID_RWEN, ID_DWEN, ID_MEMREAD, ID_PC, EX_stall, flush_pipeline);
     
@@ -600,11 +608,13 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
     reg [6:0] EX_opcode_reg;
     reg EX_MEMREAD_reg;
     reg flush_pipeline_reg;
+    reg halt_EX_forward_reg;
 
-    output halt_EX;
+    output halt_EX_backward;
+    output halt_EX_forward;
 
     input clk;
-    input halt_MEM;
+    input halt_MEM_backward;
 
     input [31:0] MEM_out;
     input MEM_RWEN;
@@ -649,7 +659,8 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
                                 (ID_opcode == 7'b0110111 || ID_opcode == 7'b0010111)    ? 0                     : //LUI, AUIPC (can't halt)
                                 1;                                                                        //unrecognized opcode
 
-    assign halt_EX = halt_EX_internal;
+    // Halts IF, ID and EX stages as soon as halt asserted
+    assign halt_EX_backward = halt_EX_internal;
 
     // Register assignments to output ports
     assign EX_out = EX_out_reg;
@@ -665,11 +676,15 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
     assign EX_MEMREAD = EX_MEMREAD_reg;
     assign flush_pipeline = flush_pipeline_reg;
 
+    // This halt is passed down the pipeline to ensure MA and RWB of previous instruction is completed before halting
+    assign halt_EX_forward = halt_EX_forward_reg;
+
     always @ (negedge clk) begin
 
-        if (halt_EX_internal || halt_MEM) begin //breaks computer if halt asserted
+        if (halt_EX_internal || halt_MEM_backward) begin //breaks computer if halt asserted
             EX_RWEN_reg <= 1; // assert RWEN and DWEN to prevent register file and data memory write
             EX_DWEN_reg <= 1;
+            halt_EX_forward_reg <= 1;
         end
         else if (EX_stall) begin // stall if EX_stall asserted (load stall)
             EX_RWEN_reg <= 1; // assert RWEN and DWEN to prevent register file and data memory write
@@ -826,7 +841,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
 
 endmodule
 
-module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM, DataOutM, halt_MEM, clk, EX_out, EX_rd, EX_RWEN, EX_DWEN, load_store_effective_addr, EX_DataRS2, EX_funct3, EX_opcode);
+module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM, DataOutM, halt_MEM_backward, halt_MEM_forward, clk, EX_out, EX_rd, EX_RWEN, EX_DWEN, load_store_effective_addr, EX_DataRS2, EX_funct3, EX_opcode, halt_EX_forward);
 
     output [31:0] MEM_out;
     output MEM_RWEN;
@@ -843,7 +858,11 @@ module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM
     
     input [31:0] DataOutM;
 
-    output halt_MEM;
+    output halt_MEM_backward;
+    output halt_MEM_forward;
+
+    reg halt_MEM_forward_reg;
+
     input clk;
 
     input [31:0] EX_out;
@@ -852,17 +871,19 @@ module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM
     input [31:0] load_store_effective_addr, EX_DataRS2;
     input [2:0] EX_funct3;
     input [6:0] EX_opcode;
+    input halt_EX_forward;
     
     wire [31:0] out_load, out_store;
 
     wire halt_load, halt_store;
     wire DWEN_store;
 
-    wire halt_MEM_internal;
+    wire halt_MEM_opcode, halt_MEM_internal;
 
-    assign halt_MEM_internal = (EX_opcode == 7'b0000011 || EX_opcode == 7'b0100011) ? halt_load || halt_store : 0; // halt only if load or store halt asserted when opcode is load or store
+    assign halt_MEM_opcode = (EX_opcode == 7'b0000011 || EX_opcode == 7'b0100011) ? halt_load || halt_store : 0; // halt only if load or store halt asserted when opcode is load or store
+    assign halt_MEM_internal = halt_MEM_opcode || halt_EX_forward; // halt asserted in this stage or in the previous stage
 
-    assign halt_MEM = halt_MEM_internal;
+    assign halt_MEM_backward = halt_MEM_internal; // when halt is asserted in this stage, it halts IF, ID and EX stages
 
     // Assignments to output ports
     assign MEM_out = MEM_out_reg;
@@ -871,10 +892,12 @@ module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM
     assign DataAddr = load_store_effective_addr;
     assign DataSize = EX_funct3[1:0];
     assign DWEN = EX_DWEN || halt_store;
+    assign halt_MEM_forward = halt_MEM_forward_reg; // halt is passed down the pipeline to ensure RWB of previous instruction is completed before halting
 
     always @ (negedge clk) begin
         if (halt_MEM_internal) begin //breaks computer if halt asserted
             MEM_RWEN_reg <= 1; // assert RWEN to prevent register file write
+            halt_MEM_forward_reg <= 1; // pass halt forward
         end
         else begin
             MEM_rd_reg <= EX_rd; // rd is passed through from Execute stage
@@ -899,20 +922,37 @@ module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM
 
 endmodule
 
-module RegisterWriteBack(DataInRd, RF_WEN, rd, MEM_out, MEM_RWEN, MEM_rd);
+module RegisterWriteBack(DataInRd, RF_WEN, rd, MEM_out, MEM_RWEN, MEM_rd, halt_MEM_forward, halt_overall, clk);
     // write back to register file
 
     output [31:0] DataInRd;
     output RF_WEN;     
     output [4:0] rd; 
+    output halt_overall;
+
+    reg halt_overall_reg;
+
 
     input [31:0] MEM_out;
     input MEM_RWEN;
     input [4:0] MEM_rd;
+    input halt_MEM_forward;
+    input clk;
 
     assign DataInRd = (MEM_RWEN == 0) ? MEM_out : 32'b0;
     assign RF_WEN = MEM_RWEN;
     assign rd = MEM_rd;
+
+    assign halt_overall = halt_overall_reg; // if there was a halt in any of the previous stages, halt the computer now for real
+
+    always @(negedge clk) begin
+        if (halt_MEM_forward) begin //breaks computer if halt asserted
+            halt_overall_reg <= 1;
+        end
+        else begin
+            halt_overall_reg <= 0;
+        end
+    end
 
 endmodule
 
@@ -973,9 +1013,12 @@ module PipelinedCPU(halt, clk, rst);
     wire flush_pipeline;
 
     // halt wires
-    wire halt_EX, halt_MEM;
+    wire halt_EX_backward, halt_EX_forward;
+    wire halt_MEM_backward, halt_MEM_forward;
+    wire halt_overall;
 
-    assign halt = halt_EX || halt_MEM; // halts only occur in Execute and Memory Access stages
+    assign halt = halt_overall;
+
 
     InstMem         IMEM    (.Addr(PC), .Size(`SIZE_WORD), .DataOut(InstWord), .CLK(clk)); //instruction memory
     DataMem         DMEM    (.Addr(DataAddr), .Size(DataSize), .DataIn(DataInM), .DataOut(DataOutM), .WEN(DWEN), .CLK(clk)); //data memory
@@ -986,25 +1029,25 @@ module PipelinedCPU(halt, clk, rst);
 
     // Instruction fetch
     InstructionFetch  IF     (.IF_InstData(IF_InstData), .PC(PC), .IF_PC(IF_PC), .ID_stall(ID_stall), .InstWord(InstWord), .clk(clk), .rst(rst), 
-                             .halt_EX(halt_EX), .halt_MEM(halt_MEM), .branch_flag(branch_flag), .branch_or_jump_target_addr(branch_or_jump_target_addr), 
+                             .halt_EX(halt_EX_backward), .halt_MEM(halt_MEM_backward), .branch_flag(branch_flag), .branch_or_jump_target_addr(branch_or_jump_target_addr), 
                              .IF_stall(IF_stall), .flush_pipeline(flush_pipeline)); //instruction fetch
 
     // Instruction decode/ register read
-    InstructionDecode ID    (.IF_InstData(IF_InstData), .IF_PC(IF_PC), .clk(clk), .EX_MEMREAD(EX_MEMREAD), .EX_rd(EX_rd), .halt_EX(halt_EX), .halt_MEM(halt_MEM), .RF_rs1(rs1), 
-                            .RF_rs2(rs2), .DataRS1(DataRS1), .DataRS2(DataRS2), .ID_stall(ID_stall), .flush_pipeline(flush_pipeline), .ID_DataRS1(ID_DataRS1), .ID_DataRS2(ID_DataRS2),
+    InstructionDecode ID    (.IF_InstData(IF_InstData), .IF_PC(IF_PC), .clk(clk), .EX_MEMREAD(EX_MEMREAD), .EX_rd(EX_rd), .halt_EX(halt_EX_backward), .halt_MEM(halt_MEM_backward), .RF_rs1(rs1), 
+                            .RF_rs2(rs2), .DataRS1(DataRS1), .DataRS2(DataRS2), .RF_DataInRd(DataInRd), .RF_Rd(rd), .RF_WEN(RF_WEN), .ID_stall(ID_stall), .flush_pipeline(flush_pipeline), .ID_DataRS1(ID_DataRS1), .ID_DataRS2(ID_DataRS2),
                              .ID_funct7(ID_funct7), .ID_rs1(ID_rs1), .ID_rs2(ID_rs2), .ID_rd(ID_rd), .ID_funct3(ID_funct3), .ID_opcode(ID_opcode), .ID_imm_I(ID_imm_I), 
                              .ID_imm_S(ID_imm_S), .ID_imm_SB(ID_imm_SB), .ID_imm_U(ID_imm_U), .ID_imm_UJ(ID_imm_UJ), .ID_RWEN(ID_RWEN), .ID_DWEN(ID_DWEN), .ID_MEMREAD(ID_MEMREAD), .ID_PC(ID_PC), .IF_stall(IF_stall), .EX_stall(EX_stall)); //instruction decode
     // Execute
     Execute           EX    (.EX_out(EX_out), .EX_RWEN(EX_RWEN), .EX_rd(EX_rd), .EX_DWEN(EX_DWEN), .branch_flag(branch_flag), .branch_or_jump_target_addr(branch_or_jump_target_addr), 
                                 .load_store_effective_addr(load_store_effective_addr), .EX_DataRS2(EX_DataRS2), .EX_funct3(EX_funct3), .EX_opcode(EX_opcode), .EX_MEMREAD(EX_MEMREAD),
-                                .halt_EX(halt_EX), .halt_MEM(halt_MEM), .clk(clk), .MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd), .ID_DataRS1(ID_DataRS1), .ID_DataRS2(ID_DataRS2),
+                                .halt_EX_backward(halt_EX_backward), .halt_EX_forward(halt_EX_forward), .halt_MEM_backward(halt_MEM_backward), .clk(clk), .MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd), .ID_DataRS1(ID_DataRS1), .ID_DataRS2(ID_DataRS2),
                                 .ID_funct7(ID_funct7), .ID_rs1(ID_rs1), .ID_rs2(ID_rs2), .ID_rd(ID_rd), .ID_funct3(ID_funct3), .ID_opcode(ID_opcode), .ID_imm_I(ID_imm_I), 
                                 .ID_imm_S(ID_imm_S), .ID_imm_SB(ID_imm_SB), .ID_imm_U(ID_imm_U), .ID_imm_UJ(ID_imm_UJ), .ID_RWEN(ID_RWEN), .ID_DWEN(ID_DWEN), .ID_MEMREAD(ID_MEMREAD), .ID_PC(ID_PC), .EX_stall(EX_stall), .flush_pipeline(flush_pipeline)); //execute
     // memory access
-    MemoryAccess      MA      (.MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd), .DataAddr(DataAddr), .DataSize(DataSize), .DWEN(DWEN), .DataInM(DataInM), .DataOutM(DataOutM), .halt_MEM(halt_MEM), .clk(clk), 
-                                .EX_out(EX_out), .EX_rd(EX_rd), .EX_RWEN(EX_RWEN), .EX_DWEN(EX_DWEN), .load_store_effective_addr(load_store_effective_addr), .EX_DataRS2(EX_DataRS2), .EX_funct3(EX_funct3), .EX_opcode(EX_opcode)); //memory access
+    MemoryAccess      MA      (.MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd), .DataAddr(DataAddr), .DataSize(DataSize), .DWEN(DWEN), .DataInM(DataInM), .DataOutM(DataOutM), .halt_MEM_backward(halt_MEM_backward), .halt_MEM_forward(halt_MEM_forward), .clk(clk), 
+                                .EX_out(EX_out), .EX_rd(EX_rd), .EX_RWEN(EX_RWEN), .EX_DWEN(EX_DWEN), .load_store_effective_addr(load_store_effective_addr), .EX_DataRS2(EX_DataRS2), .EX_funct3(EX_funct3), .EX_opcode(EX_opcode), .halt_EX_forward(halt_EX_forward)); //memory access
 
     // Register write back
-    RegisterWriteBack  RWB    (.DataInRd(DataInRd), .RF_WEN(RF_WEN), .rd(rd), .MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd)); //register write back
+    RegisterWriteBack  RWB    (.DataInRd(DataInRd), .RF_WEN(RF_WEN), .rd(rd), .MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd), .halt_MEM_forward(halt_MEM_forward), .halt_overall(halt_overall), .clk(clk)); //register write back
     
 endmodule
