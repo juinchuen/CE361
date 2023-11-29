@@ -403,12 +403,11 @@ module InstructionFetch(IF_InstData, PC, IF_PC, ID_stall, InstWord, clk, rst, ha
         end
 
         else begin
-            IF_InstData_reg <= InstWord;
-            IF_PC_reg <= PC;
-            if (IF_stall) begin
-                PC_reg <= PC;
+            if (IF_stall) begin // stall IF stage if load stall to keep on fetching same instruction i.e don't update any register
             end
             else begin
+                IF_InstData_reg <= InstWord;
+                IF_PC_reg <= PC;
                 if (branch_flag) begin // if branch flag asserted, branch to branch target address
                     if (!flush_pipeline) begin // if branch target address is next instruction, continue execution as normal by incrementing PC by 4
                         PC_reg <= PC_reg + 4;
@@ -421,6 +420,7 @@ module InstructionFetch(IF_InstData, PC, IF_PC, ID_stall, InstWord, clk, rst, ha
                 end
                 else begin // else increment PC by 4
                     PC_reg <= PC_reg + 4;
+                    ID_stall_reg <= 0;
                 end
             end
             end
@@ -429,7 +429,7 @@ module InstructionFetch(IF_InstData, PC, IF_PC, ID_stall, InstWord, clk, rst, ha
 endmodule
 
 module InstructionDecode(
-    IF_InstData, IF_PC, clk, EX_MEMREAD, EX_rd, halt_EX, halt_MEM, DataRS1, DataRS2, RF_DataInRd, RF_Rd, RF_WEN, ID_stall, flush_pipeline, RF_rs1, RF_rs2, ID_DataRS1, ID_DataRS2,
+    IF_InstData, IF_PC, clk, halt_EX, halt_MEM, DataRS1, DataRS2, RF_DataInRd, RF_Rd, RF_WEN, ID_stall, flush_pipeline, RF_rs1, RF_rs2, ID_DataRS1, ID_DataRS2,
     ID_funct7, ID_rs1, ID_rs2, ID_rd, ID_funct3, ID_opcode, ID_imm_I, ID_imm_S, ID_imm_SB, ID_imm_U, ID_imm_UJ, ID_RWEN, ID_DWEN, ID_MEMREAD, ID_PC, IF_stall, EX_stall);
     // decodes instruction and calculates control signals
 
@@ -471,7 +471,7 @@ module InstructionDecode(
     reg [31:0] ID_imm_UJ_reg;
     reg ID_RWEN_reg, ID_DWEN_reg, ID_MEMREAD_reg;
     reg [31:0] ID_PC_reg;
-    reg IF_stall_reg, EX_stall_reg;
+    reg EX_stall_reg;
 
     wire [6:0] funct7;
     wire [4:0] rs1, rs2, rd;
@@ -493,8 +493,10 @@ module InstructionDecode(
     assign DataRS1_forwarded = (!RF_WEN && (RF_Rd != 0) && (RF_Rd == rs1)) ? RF_DataInRd : DataRS1;
     assign DataRS2_forwarded = (!RF_WEN && (RF_Rd != 0) && (RF_Rd == rs2)) ? RF_DataInRd : DataRS2;
 
-    // stall if EX_MEMREAD and EX_rd is not 0 and EX_rd is equal to rs1 or rs2
-    assign load_stall = EX_MEMREAD && (EX_rd != 0) && (EX_rd == rs1 || EX_rd == rs2); // stall if EX_MEMREAD and EX_rd is not 0 and EX_rd is equal to rs1 or rs2
+    // stall if ID_MEMREAD and ID_rd is not 0 and ID_rd is equal to rs1 or rs2
+    assign load_stall = ID_MEMREAD && (ID_rd != 0) && (ID_rd == rs1 || ID_rd == rs2); // stall if EX_MEMREAD and EX_rd is not 0 and EX_rd is equal to rs1 or rs2
+
+    assign IF_stall = load_stall; // stall IF stage to keep on fetching same instruction
 
     // Register assignments to output ports
     assign ID_DataRS1 = ID_DataRS1_reg;
@@ -514,7 +516,6 @@ module InstructionDecode(
     assign ID_DWEN = ID_DWEN_reg;
     assign ID_MEMREAD = ID_MEMREAD_reg;
     assign ID_PC = ID_PC_reg;
-    assign IF_stall = IF_stall_reg;
     assign EX_stall = EX_stall_reg;
 
     always @(negedge clk) begin
@@ -523,15 +524,25 @@ module InstructionDecode(
             ID_DWEN_reg <= 1;
         end
         else begin 
-            if (load_stall) begin
-                ID_RWEN_reg <= 1; 
+            if (load_stall || ID_stall || flush_pipeline) begin
+                // Make instruction decode stage a bubble
+                ID_RWEN_reg <= 1;
                 ID_DWEN_reg <= 1;
-                IF_stall_reg <= 1; // stall IF stage if load stall to keep on fetching same instruction
-                EX_stall_reg <= 1; 
-            end
-            else if (ID_stall || flush_pipeline) begin // pipeline flush
-                ID_RWEN_reg <= 1; 
-                ID_DWEN_reg <= 1;
+                ID_MEMREAD_reg <= 0;
+                ID_DataRS1_reg <= 32'b0;
+                ID_DataRS2_reg <= 32'b0;
+                ID_funct7_reg <= funct7;
+                ID_rs1_reg <= rs1;
+                ID_rs2_reg <= rs2;
+                ID_rd_reg <= rd;
+                ID_funct3_reg <= funct3;
+                ID_opcode_reg <= opcode;
+                ID_imm_I_reg <= imm_I;
+                ID_imm_S_reg <= imm_S;
+                ID_imm_SB_reg <= imm_SB;
+                ID_imm_U_reg <= imm_U;
+                ID_imm_UJ_reg <= imm_UJ;
+                ID_PC_reg <= IF_PC;
                 EX_stall_reg <= 1;
             end
 
@@ -553,7 +564,6 @@ module InstructionDecode(
                 ID_imm_U_reg <= imm_U;
                 ID_imm_UJ_reg <= imm_UJ;
                 ID_PC_reg <= IF_PC;
-                IF_stall_reg <= 0;
                 EX_stall_reg <= 0;
             end
         end
@@ -581,7 +591,7 @@ endmodule
 module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_target_addr, load_store_effective_addr, EX_DataRS2, EX_funct3, EX_opcode, EX_MEMREAD,
                 halt_EX_backward, halt_EX_forward, halt_MEM_backward, clk, MEM_out, MEM_RWEN, MEM_rd, 
                 ID_DataRS1, ID_DataRS2,
-                ID_funct7, ID_rs1, ID_rs2, ID_rd, ID_funct3, ID_opcode, ID_imm_I, ID_imm_S, ID_imm_SB, ID_imm_U, ID_imm_UJ, ID_RWEN, ID_DWEN, ID_MEMREAD, ID_PC, EX_stall, flush_pipeline);
+                ID_funct7, ID_rs1, ID_rs2, ID_rd, ID_funct3, ID_opcode, ID_imm_I, ID_imm_S, ID_imm_SB, ID_imm_U, ID_imm_UJ, ID_RWEN, ID_DWEN, ID_MEMREAD, ID_PC, EX_stall, MEM_stall, flush_pipeline);
     
     output [31:0] EX_out;
     output EX_RWEN;
@@ -594,6 +604,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
     output [2:0] EX_funct3;
     output [6:0] EX_opcode;
     output EX_MEMREAD;
+    output MEM_stall;
     output flush_pipeline;
 
     reg [31:0] EX_out_reg;
@@ -607,6 +618,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
     reg [2:0] EX_funct3_reg;
     reg [6:0] EX_opcode_reg;
     reg EX_MEMREAD_reg;
+    reg MEM_stall_reg;
     reg flush_pipeline_reg;
     reg halt_EX_forward_reg;
 
@@ -674,22 +686,23 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
     assign EX_funct3 = EX_funct3_reg;
     assign EX_opcode = EX_opcode_reg;
     assign EX_MEMREAD = EX_MEMREAD_reg;
+    assign MEM_stall = MEM_stall_reg;
     assign flush_pipeline = flush_pipeline_reg;
 
     // This halt is passed down the pipeline to ensure MA and RWB of previous instruction is completed before halting
     assign halt_EX_forward = halt_EX_forward_reg;
 
     always @ (negedge clk) begin
-
-        if (halt_EX_internal || halt_MEM_backward) begin //breaks computer if halt asserted
-            EX_RWEN_reg <= 1; // assert RWEN and DWEN to prevent register file and data memory write
-            EX_DWEN_reg <= 1;
-            halt_EX_forward_reg <= 1;
-        end
-        else if (EX_stall) begin // stall if EX_stall asserted (load stall)
+        if (EX_stall) begin // stall if EX_stall asserted (load stall) - we check before halt as this instruction should not be executed
             EX_RWEN_reg <= 1; // assert RWEN and DWEN to prevent register file and data memory write
             EX_DWEN_reg <= 1;
             branch_flag_reg <= 0;
+            MEM_stall_reg <= 1;
+        end
+        else if (halt_EX_internal || halt_MEM_backward) begin //breaks computer if halt asserted
+            EX_RWEN_reg <= 1; // assert RWEN and DWEN to prevent register file and data memory write
+            EX_DWEN_reg <= 1;
+            halt_EX_forward_reg <= 1;
         end
         else if (flush_pipeline) begin // flush pipeline if branch misprediction
             EX_RWEN_reg <= 1; // assert RWEN and DWEN to prevent register file and data memory write
@@ -700,8 +713,8 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
         else if (ID_opcode == 7'b0110011) begin // Arithmetic
             EX_out_reg <= out_arithmetic;
             EX_rd_reg <= ID_rd;
-            EX_RWEN_reg <= 0; // neg assert
-            EX_DWEN_reg <= 1;
+            EX_RWEN_reg <= ID_RWEN;
+            EX_DWEN_reg <= ID_DWEN;
             branch_flag_reg <= 0;
             branch_or_jump_target_addr_reg <= 32'b0;
             load_store_effective_addr_reg <= 32'b0;
@@ -710,12 +723,13 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
             flush_pipeline_reg <= 0;
+            MEM_stall_reg <= 0;
         end
         else if (ID_opcode == 7'b0010011) begin // Immediate Arithmetic
             EX_out_reg <= out_ari_imm;
             EX_rd_reg <= ID_rd;
-            EX_RWEN_reg <= 0;
-            EX_DWEN_reg <= 1;
+            EX_RWEN_reg <= ID_RWEN;
+            EX_DWEN_reg <= ID_DWEN;
             branch_flag_reg <= 0;
             branch_or_jump_target_addr_reg <= 32'b0;
             load_store_effective_addr_reg <= 32'b0;
@@ -724,12 +738,12 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
             flush_pipeline_reg <= 0;
+            MEM_stall_reg <= 0;
         end
         else if (ID_opcode == 7'b0000011) begin // Load
             EX_out_reg <= 32'b0;
             EX_rd_reg <= ID_rd;
-            EX_RWEN_reg <= 1; // This will be neg asserted in the next cycle (MEM stage)
-            EX_DWEN_reg <= 1;
+            EX_RWEN_reg <= ID_RWEN;
             branch_flag_reg <= 0;
             branch_or_jump_target_addr_reg <= 32'b0;
             load_store_effective_addr_reg <= load_store_effective_addr_internal;
@@ -738,12 +752,13 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
             flush_pipeline_reg <= 0;
+            MEM_stall_reg <= 0;
         end
         else if (ID_opcode == 7'b0100011) begin // Store
             EX_out_reg <= 32'b0;
             EX_rd_reg <= ID_rd;
-            EX_RWEN_reg <= 1;
-            EX_DWEN_reg <= 0; // Enable data memory write
+            EX_RWEN_reg <= ID_RWEN;
+            EX_DWEN_reg <= ID_DWEN;
             branch_flag_reg <= 0;
             branch_or_jump_target_addr_reg <= 32'b0;
             load_store_effective_addr_reg <= load_store_effective_addr_internal;
@@ -752,12 +767,12 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
             flush_pipeline_reg <= 0;
+            MEM_stall_reg <= 0;
         end
         else if (ID_opcode == 7'b1100011) begin // Branch
             EX_out_reg <= 32'b0;
             EX_rd_reg <= ID_rd;
-            EX_RWEN_reg <= 1;
-            EX_DWEN_reg <= 1;
+            EX_DWEN_reg <= ID_DWEN;
             branch_flag_reg <= branch_flag_internal;
             branch_or_jump_target_addr_reg <= branch_target_addr;
             load_store_effective_addr_reg <= 32'b0;
@@ -765,7 +780,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_funct3_reg <= ID_funct3;
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
-            flush_pipeline_reg <= 0;
+            MEM_stall_reg <= 0;
             if (branch_flag_internal && (ID_PC + 4 != branch_target_addr)) begin // if branch misprediction, flush pipeline starting next cycle
                 flush_pipeline_reg <= 1;
             end
@@ -776,8 +791,8 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
         else if (ID_opcode == 7'b1101111) begin // JAL
             EX_out_reg <= out_jump;
             EX_rd_reg <= ID_rd;
-            EX_RWEN_reg <= 0;
-            EX_DWEN_reg <= 1;
+            EX_RWEN_reg <= ID_RWEN;
+            EX_DWEN_reg <= ID_DWEN;
             branch_flag_reg <= 1;
             branch_or_jump_target_addr_reg <= jump_target_addr;
             load_store_effective_addr_reg <= 32'b0;
@@ -785,18 +800,15 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_funct3_reg <= ID_funct3;
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
-            if (branch_flag_internal && (ID_PC + 4 != branch_target_addr)) begin // if branch misprediction, flush pipeline starting next cycle
-                flush_pipeline_reg <= 1;
-            end
-            else begin
-                flush_pipeline_reg <= 0;
-            end
+            // flush pipeline starting next cycle for jumps
+            flush_pipeline_reg <= 1;
+            MEM_stall_reg <= 0;
         end
         else if (ID_opcode == 7'b1100111) begin // JALR
             EX_out_reg <= out_jump;
             EX_rd_reg <= ID_rd;
-            EX_RWEN_reg <= 0;
-            EX_DWEN_reg <= 1;
+            EX_RWEN_reg <= ID_RWEN;
+            EX_DWEN_reg <= ID_DWEN;
             branch_flag_reg <= 1;
             branch_or_jump_target_addr_reg <= jump_target_addr;
             load_store_effective_addr_reg <= 32'b0;
@@ -804,12 +816,16 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_funct3_reg <= ID_funct3;
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
+            flush_pipeline_reg <= 0;
+            // flush pipeline starting next cycle for jumps
+            flush_pipeline_reg <= 1;
+            MEM_stall_reg <= 0;
         end
         else if (ID_opcode == 7'b0110111 || ID_opcode == 7'b0010111) begin // LUI or AUIPC
             EX_out_reg <= out_upper_imm;
             EX_rd_reg <= ID_rd;
-            EX_RWEN_reg <= 0;
-            EX_DWEN_reg <= 1;
+            EX_RWEN_reg <= ID_RWEN;
+            EX_DWEN_reg <= ID_DWEN;
             branch_flag_reg <= 0;
             branch_or_jump_target_addr_reg <= 32'b0;
             load_store_effective_addr_reg <= 32'b0;
@@ -818,12 +834,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
             flush_pipeline_reg <= 0;
-            if (branch_flag_internal && (ID_PC + 4 != branch_target_addr)) begin // if branch misprediction, flush pipeline starting next cycle
-                flush_pipeline_reg <= 1;
-            end
-            else begin
-                flush_pipeline_reg <= 0;
-            end
+            MEM_stall_reg <= 0;
         end
         else begin // Invalid opcode
             EX_RWEN_reg <= 1; // assert RWEN and DWEN to prevent register file and data memory write
@@ -841,7 +852,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
 
 endmodule
 
-module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM, DataOutM, halt_MEM_backward, halt_MEM_forward, clk, EX_out, EX_rd, EX_RWEN, EX_DWEN, load_store_effective_addr, EX_DataRS2, EX_funct3, EX_opcode, halt_EX_forward);
+module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM, DataOutM, halt_MEM_backward, halt_MEM_forward, clk, EX_out, EX_rd, EX_RWEN, EX_DWEN, load_store_effective_addr, EX_DataRS2, EX_funct3, EX_opcode, halt_EX_forward, MEM_stall);
 
     output [31:0] MEM_out;
     output MEM_RWEN;
@@ -872,6 +883,7 @@ module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM
     input [2:0] EX_funct3;
     input [6:0] EX_opcode;
     input halt_EX_forward;
+    input MEM_stall;
     
     wire [31:0] out_load, out_store;
 
@@ -895,7 +907,10 @@ module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM
     assign halt_MEM_forward = halt_MEM_forward_reg; // halt is passed down the pipeline to ensure RWB of previous instruction is completed before halting
 
     always @ (negedge clk) begin
-        if (halt_MEM_internal) begin //breaks computer if halt asserted
+        if (MEM_stall) begin // stall if MEM_stall asserted (load stall) - we check before halt as this instruction should not be executed
+            MEM_RWEN_reg <= 1; // assert RWEN to prevent register file write
+        end
+        else if (halt_MEM_internal) begin //breaks computer if halt asserted
             MEM_RWEN_reg <= 1; // assert RWEN to prevent register file write
             halt_MEM_forward_reg <= 1; // pass halt forward
         end
@@ -1009,7 +1024,7 @@ module PipelinedCPU(halt, clk, rst);
     wire [4:0] MEM_rd;
 
     // stall wires
-    wire IF_stall, ID_stall, EX_stall;
+    wire IF_stall, ID_stall, EX_stall, MEM_stall;
     wire flush_pipeline;
 
     // halt wires
@@ -1033,7 +1048,7 @@ module PipelinedCPU(halt, clk, rst);
                              .IF_stall(IF_stall), .flush_pipeline(flush_pipeline)); //instruction fetch
 
     // Instruction decode/ register read
-    InstructionDecode ID    (.IF_InstData(IF_InstData), .IF_PC(IF_PC), .clk(clk), .EX_MEMREAD(EX_MEMREAD), .EX_rd(EX_rd), .halt_EX(halt_EX_backward), .halt_MEM(halt_MEM_backward), .RF_rs1(rs1), 
+    InstructionDecode ID    (.IF_InstData(IF_InstData), .IF_PC(IF_PC), .clk(clk), .halt_EX(halt_EX_backward), .halt_MEM(halt_MEM_backward), .RF_rs1(rs1), 
                             .RF_rs2(rs2), .DataRS1(DataRS1), .DataRS2(DataRS2), .RF_DataInRd(DataInRd), .RF_Rd(rd), .RF_WEN(RF_WEN), .ID_stall(ID_stall), .flush_pipeline(flush_pipeline), .ID_DataRS1(ID_DataRS1), .ID_DataRS2(ID_DataRS2),
                              .ID_funct7(ID_funct7), .ID_rs1(ID_rs1), .ID_rs2(ID_rs2), .ID_rd(ID_rd), .ID_funct3(ID_funct3), .ID_opcode(ID_opcode), .ID_imm_I(ID_imm_I), 
                              .ID_imm_S(ID_imm_S), .ID_imm_SB(ID_imm_SB), .ID_imm_U(ID_imm_U), .ID_imm_UJ(ID_imm_UJ), .ID_RWEN(ID_RWEN), .ID_DWEN(ID_DWEN), .ID_MEMREAD(ID_MEMREAD), .ID_PC(ID_PC), .IF_stall(IF_stall), .EX_stall(EX_stall)); //instruction decode
@@ -1042,10 +1057,10 @@ module PipelinedCPU(halt, clk, rst);
                                 .load_store_effective_addr(load_store_effective_addr), .EX_DataRS2(EX_DataRS2), .EX_funct3(EX_funct3), .EX_opcode(EX_opcode), .EX_MEMREAD(EX_MEMREAD),
                                 .halt_EX_backward(halt_EX_backward), .halt_EX_forward(halt_EX_forward), .halt_MEM_backward(halt_MEM_backward), .clk(clk), .MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd), .ID_DataRS1(ID_DataRS1), .ID_DataRS2(ID_DataRS2),
                                 .ID_funct7(ID_funct7), .ID_rs1(ID_rs1), .ID_rs2(ID_rs2), .ID_rd(ID_rd), .ID_funct3(ID_funct3), .ID_opcode(ID_opcode), .ID_imm_I(ID_imm_I), 
-                                .ID_imm_S(ID_imm_S), .ID_imm_SB(ID_imm_SB), .ID_imm_U(ID_imm_U), .ID_imm_UJ(ID_imm_UJ), .ID_RWEN(ID_RWEN), .ID_DWEN(ID_DWEN), .ID_MEMREAD(ID_MEMREAD), .ID_PC(ID_PC), .EX_stall(EX_stall), .flush_pipeline(flush_pipeline)); //execute
+                                .ID_imm_S(ID_imm_S), .ID_imm_SB(ID_imm_SB), .ID_imm_U(ID_imm_U), .ID_imm_UJ(ID_imm_UJ), .ID_RWEN(ID_RWEN), .ID_DWEN(ID_DWEN), .ID_MEMREAD(ID_MEMREAD), .ID_PC(ID_PC), .EX_stall(EX_stall), .flush_pipeline(flush_pipeline), .MEM_stall(MEM_stall)); //execute
     // memory access
     MemoryAccess      MA      (.MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd), .DataAddr(DataAddr), .DataSize(DataSize), .DWEN(DWEN), .DataInM(DataInM), .DataOutM(DataOutM), .halt_MEM_backward(halt_MEM_backward), .halt_MEM_forward(halt_MEM_forward), .clk(clk), 
-                                .EX_out(EX_out), .EX_rd(EX_rd), .EX_RWEN(EX_RWEN), .EX_DWEN(EX_DWEN), .load_store_effective_addr(load_store_effective_addr), .EX_DataRS2(EX_DataRS2), .EX_funct3(EX_funct3), .EX_opcode(EX_opcode), .halt_EX_forward(halt_EX_forward)); //memory access
+                                .EX_out(EX_out), .EX_rd(EX_rd), .EX_RWEN(EX_RWEN), .EX_DWEN(EX_DWEN), .load_store_effective_addr(load_store_effective_addr), .EX_DataRS2(EX_DataRS2), .EX_funct3(EX_funct3), .EX_opcode(EX_opcode), .halt_EX_forward(halt_EX_forward), .MEM_stall(MEM_stall)); //memory access
 
     // Register write back
     RegisterWriteBack  RWB    (.DataInRd(DataInRd), .RF_WEN(RF_WEN), .rd(rd), .MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd), .halt_MEM_forward(halt_MEM_forward), .halt_overall(halt_overall), .clk(clk)); //register write back
