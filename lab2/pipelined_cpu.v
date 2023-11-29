@@ -902,6 +902,7 @@ module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, MEM_BRANCH_OR_JUMP, DataAddr, Dat
     assign DataSize = EX_funct3[1:0];
     assign DWEN = EX_DWEN || halt_store;
     assign halt_MEM_forward = halt_MEM_forward_reg; // halt is passed down the pipeline to ensure RWB of previous instruction is completed before halting
+    assign DataInM = out_store;
 
     always @ (negedge clk) begin
         if (MEM_stall) begin // stall if MEM_stall asserted (load stall) - we check before halt as this instruction should not be executed
