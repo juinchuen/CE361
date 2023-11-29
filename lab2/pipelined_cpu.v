@@ -435,8 +435,6 @@ module InstructionDecode(
 
     input [31:0] IF_InstData, IF_PC;
     input clk;
-    input EX_MEMREAD;
-    input [4:0] EX_rd;
     input halt_EX;
     input halt_MEM;
     input [31:0] DataRS1, DataRS2;
