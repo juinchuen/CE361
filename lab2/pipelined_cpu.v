@@ -267,7 +267,7 @@ module jump(out, halt, PC_next, PC, DataRS1, imm_I, imm_UJ, funct3, opcode);
 
     assign out =  PC + 4;
 
-    assign halt =  !(((opcode == 7'b1100111) & (funct3 != 3'b000)) ||
+    assign halt =  !(((opcode == 7'b1100111) && (funct3 == 3'b000)) ||
                     (opcode == 7'b1101111));
 
 endmodule
@@ -369,19 +369,17 @@ module effective_addr(EffectiveDataAddr, halt, DataRS1, imm_S, imm_I, opcode, fu
 
 endmodule
 
-module InstructionFetch(IF_InstData, PC, IF_PC, ID_stall, InstWord, clk, rst, halt_EX, halt_MEM, branch_flag, branch_or_jump_target_addr, IF_stall_ID, IF_stall_EX);
+module InstructionFetch(IF_InstData, PC, IF_PC, InstWord, clk, rst, halt_EX, halt_MEM, branch_flag, branch_or_jump_target_addr, IF_stall);
     // fetches instruction from instruction MEMory
 
     output [31:0] IF_InstData;
     output [31:0] PC; 
     output [31:0] IF_PC;
-    output ID_stall;
 
     // Internal Registers
     reg [31:0] IF_InstData_reg;
     reg [31:0] PC_reg;
     reg [31:0] IF_PC_reg;
-    reg ID_stall_reg;
 
     input [31:0] InstWord;
     input clk;
@@ -390,14 +388,12 @@ module InstructionFetch(IF_InstData, PC, IF_PC, ID_stall, InstWord, clk, rst, ha
     input branch_flag;
     input [31:0] branch_or_jump_target_addr;
 
-    input IF_stall_ID; // load stall signal from ID stage
-    input IF_stall_EX; // load stall signal from EX stage
+    input IF_stall; // load stall signal from ID stage
 
     // Register assignments to output ports
     assign IF_InstData = IF_InstData_reg;
     assign PC = PC_reg;
     assign IF_PC = IF_PC_reg;
-    assign ID_stall = ID_stall_reg;
 
     always @ (negedge clk or negedge rst) begin
         if (!rst) begin
@@ -408,8 +404,7 @@ module InstructionFetch(IF_InstData, PC, IF_PC, ID_stall, InstWord, clk, rst, ha
         end
 
         else begin
-            if (IF_stall_ID || IF_stall_EX) begin // stall IF stage if load stall to keep on fetching same instruction i.e don't update any registers
-                ID_stall_reg <= 1;
+            if (IF_stall) begin // stall IF stage if load stall to keep on fetching same instruction i.e don't update any registers
             end
             else begin
                 IF_InstData_reg <= InstWord;
@@ -417,18 +412,22 @@ module InstructionFetch(IF_InstData, PC, IF_PC, ID_stall, InstWord, clk, rst, ha
                 if (branch_flag) begin // if branch flag asserted, branch to branch target address
                     PC_reg <= branch_or_jump_target_addr;
                 end
-                else begin // else increment PC by 4
-                    PC_reg <= PC_reg + 4;
+                else begin 
+                    if (InstWord != 32'h0) begin // if instruction is not 0, increment PC by 4
+                        PC_reg <= PC_reg + 4;
+                    end
+                    else begin
+                        PC_reg <= PC_reg; // If instruction is 0, keep PC same because it is end of program and previous instruction will halt the computer
+                    end
                 end
             end
             end
     end
-
 endmodule
 
 module InstructionDecode(
-    IF_InstData, IF_PC, clk, halt_EX, halt_MEM, DataRS1, DataRS2, RF_DataInRd, RF_Rd, RF_WEN, ID_stall, RF_rs1, RF_rs2, ID_DataRS1, ID_DataRS2,
-    ID_funct7, ID_rs1, ID_rs2, ID_rd, ID_funct3, ID_opcode, ID_imm_I, ID_imm_S, ID_imm_SB, ID_imm_U, ID_imm_UJ, ID_RWEN, ID_DWEN, ID_MEMREAD, ID_BRANCH_OR_JUMP, ID_PC, IF_stall_ID, EX_stall);
+    IF_InstData, IF_PC, clk, halt_EX, halt_MEM, DataRS1, DataRS2, RF_DataInRd, RF_Rd, RF_WEN, EX_BRANCH_OR_JUMP, MEM_BRANCH_OR_JUMP, RF_rs1, RF_rs2, ID_DataRS1, ID_DataRS2,
+    ID_funct7, ID_rs1, ID_rs2, ID_rd, ID_funct3, ID_opcode, ID_imm_I, ID_imm_S, ID_imm_SB, ID_imm_U, ID_imm_UJ, ID_RWEN, ID_DWEN, ID_MEMREAD, ID_BRANCH_OR_JUMP, ID_PC, IF_stall, EX_stall);
     // decodes instruction and calculates control signals
 
     input [31:0] IF_InstData, IF_PC;
@@ -439,7 +438,8 @@ module InstructionDecode(
     input [31:0] RF_DataInRd;
     input [4:0] RF_Rd;
     input RF_WEN;
-    input ID_stall;
+    input EX_BRANCH_OR_JUMP, MEM_BRANCH_OR_JUMP;
+
 
     output [4:0] RF_rs1, RF_rs2;
     output [31:0] ID_DataRS1, ID_DataRS2;
@@ -453,7 +453,7 @@ module InstructionDecode(
     output [31:0] ID_imm_UJ;
     output ID_RWEN, ID_DWEN, ID_MEMREAD, ID_BRANCH_OR_JUMP;
     output [31:0] ID_PC;
-    output IF_stall_ID, EX_stall;
+    output IF_stall, EX_stall;
 
     // Internal Registers
     reg [31:0] ID_DataRS1_reg, ID_DataRS2_reg;
@@ -479,6 +479,10 @@ module InstructionDecode(
     wire [31:0] imm_UJ;
     wire RWEN, DWEN, MEMREAD, BRANCH_OR_JUMP;
     wire load_stall;
+    wire first_branch_or_jump_stall;
+    wire second_branch_or_jump_stall;
+    wire third_branch_or_jump_stall;
+    wire branch_or_jump_stall;
 
     // Register file read logic
     assign RF_rs1 = rs1;
@@ -490,11 +494,15 @@ module InstructionDecode(
     assign DataRS2_forwarded = (!RF_WEN && (RF_Rd != 0) && (RF_Rd == rs2)) ? RF_DataInRd : DataRS2;
 
     // stall if ID_MEMREAD and ID_rd is not 0 and ID_rd is equal to rs1 or rs2
-    assign load_stall = ID_MEMREAD && (ID_rd != 0) && (ID_rd == rs1 || ID_rd == rs2); // stall if EX_MEMREAD and EX_rd is not 0 and EX_rd is equal to rs1 or rs2
+    assign load_stall = ID_MEMREAD_reg && (ID_rd_reg != 0) && (ID_rd_reg == rs1 || ID_rd_reg == rs2); // stall if EX_MEMREAD and EX_rd is not 0 and EX_rd is equal to rs1 or rs2
 
-    assign branch_or_jump_stall = BRANCH_OR_JUMP && !ID_BRANCH_OR_JUMP_reg; // stall if branch or jump instruction in ID stage and not in EX stage (in case of multiple branch or jump instructions in a row, only stall the first one)
+    assign first_branch_or_jump_stall = ID_BRANCH_OR_JUMP_reg == 1 ? 1 : 0; // stall if previous instruction is branch or jump
+    assign IF_stall = load_stall || first_branch_or_jump_stall; // keep fetching same instruction if load stall or the first stall of branch or jump
 
-    assign IF_stall_ID = load_stall || branch_or_jump_stall; // stall IF stage to keep fetching same instruction
+    assign second_branch_or_jump_stall = EX_BRANCH_OR_JUMP == 1 ? 1 : 0; // stall if previous instruction is branch or jump
+    assign third_branch_or_jump_stall = MEM_BRANCH_OR_JUMP == 1 ? 1 : 0; // stall if previous instruction is branch or jump
+
+    assign branch_or_jump_stall = first_branch_or_jump_stall || second_branch_or_jump_stall || third_branch_or_jump_stall; // stall if previous instruction is branch or jump
 
     // Register assignments to output ports
     assign ID_DataRS1 = ID_DataRS1_reg;
@@ -523,7 +531,7 @@ module InstructionDecode(
             ID_DWEN_reg <= 1;
         end
         else begin 
-            if (load_stall || ID_stall) begin
+            if (load_stall || branch_or_jump_stall) begin
                 // Make instruction decode stage a bubble
                 ID_RWEN_reg <= 1;
                 ID_DWEN_reg <= 1;
@@ -591,10 +599,10 @@ module InstructionDecode(
 endmodule
 
 
-module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_target_addr, load_store_effective_addr, EX_DataRS2, EX_funct3, EX_opcode, EX_MEMREAD,
+module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_target_addr, load_store_effective_addr, EX_DataRS2, EX_funct3, EX_opcode, EX_MEMREAD, EX_BRANCH_OR_JUMP,
                 halt_EX_backward, halt_EX_forward, halt_MEM_backward, clk, MEM_out, MEM_RWEN, MEM_rd, 
                 ID_DataRS1, ID_DataRS2,
-                ID_funct7, ID_rs1, ID_rs2, ID_rd, ID_funct3, ID_opcode, ID_imm_I, ID_imm_S, ID_imm_SB, ID_imm_U, ID_imm_UJ, ID_RWEN, ID_DWEN, ID_MEMREAD, ID_BRANCH_OR_JUMP, ID_PC, EX_stall, MEM_stall, IF_stall_EX);
+                ID_funct7, ID_rs1, ID_rs2, ID_rd, ID_funct3, ID_opcode, ID_imm_I, ID_imm_S, ID_imm_SB, ID_imm_U, ID_imm_UJ, ID_RWEN, ID_DWEN, ID_MEMREAD, ID_BRANCH_OR_JUMP, ID_PC, EX_stall, MEM_stall);
     
     output [31:0] EX_out;
     output EX_RWEN;
@@ -607,8 +615,8 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
     output [2:0] EX_funct3;
     output [6:0] EX_opcode;
     output EX_MEMREAD;
+    output EX_BRANCH_OR_JUMP;
     output MEM_stall;
-    output IF_stall_EX;
 
     reg [31:0] EX_out_reg;
     reg EX_RWEN_reg;
@@ -621,6 +629,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
     reg [2:0] EX_funct3_reg;
     reg [6:0] EX_opcode_reg;
     reg EX_MEMREAD_reg;
+    reg EX_BRANCH_OR_JUMP_reg;
     reg MEM_stall_reg;
     reg halt_EX_forward_reg;
 
@@ -673,10 +682,8 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
                                 (ID_opcode == 7'b0110111 || ID_opcode == 7'b0010111)    ? 0                     : //LUI, AUIPC (can't halt)
                                 1;                                                                        //unrecognized opcode
 
-    assign IF_stall_EX = ID_BRANCH_OR_JUMP; // stall IF stage if branch or jump instruction in ID stage
-
-    // Halts IF, ID and EX stages as soon as halt asserted
-    assign halt_EX_backward = halt_EX_internal;
+    // Halts IF, ID and EX stages as soon as halt asserted and this instruction is being executed i.e it is not a bubble
+    assign halt_EX_backward = halt_EX_internal && !EX_stall;
 
     // Register assignments to output ports
     assign EX_out = EX_out_reg;
@@ -690,6 +697,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
     assign EX_funct3 = EX_funct3_reg;
     assign EX_opcode = EX_opcode_reg;
     assign EX_MEMREAD = EX_MEMREAD_reg;
+    assign EX_BRANCH_OR_JUMP = EX_BRANCH_OR_JUMP_reg;
     assign MEM_stall = MEM_stall_reg;
 
     // This halt is passed down the pipeline to ensure MA and RWB of previous instruction is completed before halting
@@ -700,12 +708,15 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_RWEN_reg <= 1; // assert RWEN and DWEN to prevent register file and data memory write
             EX_DWEN_reg <= 1;
             branch_flag_reg <= 0;
+            EX_BRANCH_OR_JUMP_reg <= 0;
             MEM_stall_reg <= 1;
         end
         else if (halt_EX_internal || halt_MEM_backward) begin //breaks computer if halt asserted
             EX_RWEN_reg <= 1; // assert RWEN and DWEN to prevent register file and data memory write
             EX_DWEN_reg <= 1;
+            EX_BRANCH_OR_JUMP_reg <= 0;
             halt_EX_forward_reg <= 1;
+            MEM_stall_reg <= 0;
         end
         else if (ID_opcode == 7'b0110011) begin // Arithmetic
             EX_out_reg <= out_arithmetic;
@@ -719,6 +730,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_funct3_reg <= ID_funct3;
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
+            EX_BRANCH_OR_JUMP_reg <= ID_BRANCH_OR_JUMP;
             MEM_stall_reg <= 0;
         end
         else if (ID_opcode == 7'b0010011) begin // Immediate Arithmetic
@@ -733,6 +745,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_funct3_reg <= ID_funct3;
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
+            EX_BRANCH_OR_JUMP_reg <= ID_BRANCH_OR_JUMP;
             MEM_stall_reg <= 0;
         end
         else if (ID_opcode == 7'b0000011) begin // Load
@@ -746,6 +759,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_funct3_reg <= ID_funct3;
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
+            EX_BRANCH_OR_JUMP_reg <= ID_BRANCH_OR_JUMP;
             MEM_stall_reg <= 0;
         end
         else if (ID_opcode == 7'b0100011) begin // Store
@@ -760,19 +774,26 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_funct3_reg <= ID_funct3;
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
+            EX_BRANCH_OR_JUMP_reg <= ID_BRANCH_OR_JUMP;
             MEM_stall_reg <= 0;
         end
         else if (ID_opcode == 7'b1100011) begin // Branch
             EX_out_reg <= 32'b0;
             EX_rd_reg <= ID_rd;
             EX_DWEN_reg <= ID_DWEN;
-            branch_flag_reg <= branch_flag_internal;
-            branch_or_jump_target_addr_reg <= branch_target_addr;
+            branch_flag_reg <= 1; // branch flag is always asserted for branch instructions as the branch target address is calculated here
+            if (branch_flag_internal) begin // if branch flag asserted, branch to branch target address
+                branch_or_jump_target_addr_reg <= branch_target_addr;
+            end
+            else begin // else branch to next instruction
+                branch_or_jump_target_addr_reg <= ID_PC + 4;
+            end
             load_store_effective_addr_reg <= 32'b0;
             EX_DataRS2_reg <= DataRS2_forwarded;
             EX_funct3_reg <= ID_funct3;
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
+            EX_BRANCH_OR_JUMP_reg <= ID_BRANCH_OR_JUMP;
             MEM_stall_reg <= 0;
         end
         else if (ID_opcode == 7'b1101111 || ID_opcode == 7'b1100111) begin // JAL or JALR
@@ -787,6 +808,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_funct3_reg <= ID_funct3;
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
+            EX_BRANCH_OR_JUMP_reg <= ID_BRANCH_OR_JUMP;
             MEM_stall_reg <= 0;
         end
         else if (ID_opcode == 7'b0110111 || ID_opcode == 7'b0010111) begin // LUI or AUIPC
@@ -801,12 +823,14 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_funct3_reg <= ID_funct3;
             EX_opcode_reg <= ID_opcode;
             EX_MEMREAD_reg <= ID_MEMREAD;
+            EX_BRANCH_OR_JUMP_reg <= ID_BRANCH_OR_JUMP;
             MEM_stall_reg <= 0;
         end
         else begin // Invalid opcode
             EX_RWEN_reg <= 1; // assert RWEN and DWEN to prevent register file and data memory write
             EX_DWEN_reg <= 1; 
             EX_MEMREAD_reg <= 0;
+            EX_BRANCH_OR_JUMP_reg <= 0;
         end
     end
 
@@ -819,15 +843,17 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
 
 endmodule
 
-module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM, DataOutM, halt_MEM_backward, halt_MEM_forward, clk, EX_out, EX_rd, EX_RWEN, EX_DWEN, load_store_effective_addr, EX_DataRS2, EX_funct3, EX_opcode, halt_EX_forward, MEM_stall);
+module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, MEM_BRANCH_OR_JUMP, DataAddr, DataSize, DWEN, DataInM, DataOutM, halt_MEM_backward, halt_MEM_forward, clk, EX_out, EX_rd, EX_RWEN, EX_DWEN, load_store_effective_addr, EX_DataRS2, EX_funct3, EX_opcode, EX_BRANCH_OR_JUMP, halt_EX_forward, MEM_stall);
 
     output [31:0] MEM_out;
     output MEM_RWEN;
     output [4:0] MEM_rd;
+    output MEM_BRANCH_OR_JUMP;
 
     reg [31:0] MEM_out_reg;
     reg MEM_RWEN_reg;
     reg [4:0] MEM_rd_reg;
+    reg MEM_BRANCH_OR_JUMP_reg;
 
     output [31:0] DataAddr;
     output [1:0] DataSize;
@@ -849,6 +875,7 @@ module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM
     input [31:0] load_store_effective_addr, EX_DataRS2;
     input [2:0] EX_funct3;
     input [6:0] EX_opcode;
+    input EX_BRANCH_OR_JUMP;
     input halt_EX_forward;
     input MEM_stall;
     
@@ -862,12 +889,15 @@ module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM
     assign halt_MEM_opcode = (EX_opcode == 7'b0000011 || EX_opcode == 7'b0100011) ? halt_load || halt_store : 0; // halt only if load or store halt asserted when opcode is load or store
     assign halt_MEM_internal = halt_MEM_opcode || halt_EX_forward; // halt asserted in this stage or in the previous stage
 
-    assign halt_MEM_backward = halt_MEM_internal; // when halt is asserted in this stage, it halts IF, ID and EX stages
+    assign halt_MEM_backward = halt_MEM_internal && !MEM_stall; // halt asserted in this stage and this instruction is being executed i.e it is not a bubble
 
     // Assignments to output ports
     assign MEM_out = MEM_out_reg;
     assign MEM_RWEN = MEM_RWEN_reg;
     assign MEM_rd = MEM_rd_reg;
+
+    assign MEM_BRANCH_OR_JUMP = MEM_BRANCH_OR_JUMP_reg;
+
     assign DataAddr = load_store_effective_addr;
     assign DataSize = EX_funct3[1:0];
     assign DWEN = EX_DWEN || halt_store;
@@ -876,13 +906,16 @@ module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, DataAddr, DataSize, DWEN, DataInM
     always @ (negedge clk) begin
         if (MEM_stall) begin // stall if MEM_stall asserted (load stall) - we check before halt as this instruction should not be executed
             MEM_RWEN_reg <= 1; // assert RWEN to prevent register file write
+            MEM_BRANCH_OR_JUMP_reg <= 0;
         end
         else if (halt_MEM_internal) begin //breaks computer if halt asserted
             MEM_RWEN_reg <= 1; // assert RWEN to prevent register file write
             halt_MEM_forward_reg <= 1; // pass halt forward
+            MEM_BRANCH_OR_JUMP_reg <= 0;
         end
         else begin
             MEM_rd_reg <= EX_rd; // rd is passed through from Execute stage
+            MEM_BRANCH_OR_JUMP_reg <= EX_BRANCH_OR_JUMP; // branch or jump flag is passed through from Execute stage
 
             if (EX_opcode == 7'b0000011) begin // Load
                 MEM_out_reg <= halt_load ? 32'b0 : out_load;
@@ -984,14 +1017,16 @@ module PipelinedCPU(halt, clk, rst);
     wire [2:0] EX_funct3;
     wire [6:0] EX_opcode;
     wire EX_MEMREAD;
+    wire EX_BRANCH_OR_JUMP;
 
     // Memory access wires
     wire [31:0] MEM_out;
     wire MEM_RWEN;
     wire [4:0] MEM_rd;
+    wire MEM_BRANCH_OR_JUMP;
 
     // stall wires
-    wire IF_stall_ID, IF_stall_EX, ID_stall, EX_stall, MEM_stall;
+    wire IF_stall, EX_stall, MEM_stall;
 
     // halt wires
     wire halt_EX_backward, halt_EX_forward;
@@ -1009,24 +1044,25 @@ module PipelinedCPU(halt, clk, rst);
     // Pipeline stages
 
     // Instruction fetch
-    InstructionFetch  IF     (.IF_InstData(IF_InstData), .PC(PC), .IF_PC(IF_PC), .ID_stall(ID_stall), .InstWord(InstWord), .clk(clk), .rst(rst), 
+    InstructionFetch  IF     (.IF_InstData(IF_InstData), .PC(PC), .IF_PC(IF_PC), .InstWord(InstWord), .clk(clk), .rst(rst), 
                              .halt_EX(halt_EX_backward), .halt_MEM(halt_MEM_backward), .branch_flag(branch_flag), .branch_or_jump_target_addr(branch_or_jump_target_addr), 
-                             .IF_stall_ID(IF_stall_ID), .IF_stall_EX(IF_stall_EX)); //instruction fetch
+                             .IF_stall(IF_stall)); //instruction fetch
 
     // Instruction decode/ register read
-    InstructionDecode ID    (.IF_InstData(IF_InstData), .IF_PC(IF_PC), .clk(clk), .halt_EX(halt_EX_backward), .halt_MEM(halt_MEM_backward), .RF_rs1(rs1), 
-                            .RF_rs2(rs2), .DataRS1(DataRS1), .DataRS2(DataRS2), .RF_DataInRd(DataInRd), .RF_Rd(rd), .RF_WEN(RF_WEN), .ID_stall(ID_stall), .ID_DataRS1(ID_DataRS1), .ID_DataRS2(ID_DataRS2),
-                             .ID_funct7(ID_funct7), .ID_rs1(ID_rs1), .ID_rs2(ID_rs2), .ID_rd(ID_rd), .ID_funct3(ID_funct3), .ID_opcode(ID_opcode), .ID_imm_I(ID_imm_I), 
-                             .ID_imm_S(ID_imm_S), .ID_imm_SB(ID_imm_SB), .ID_imm_U(ID_imm_U), .ID_imm_UJ(ID_imm_UJ), .ID_RWEN(ID_RWEN), .ID_DWEN(ID_DWEN), .ID_MEMREAD(ID_MEMREAD), .ID_BRANCH_OR_JUMP(ID_BRANCH_OR_JUMP), .ID_PC(ID_PC), .IF_stall_ID(IF_stall_ID), .EX_stall(EX_stall)); //instruction decode
+    InstructionDecode ID    (.IF_InstData(IF_InstData), .IF_PC(IF_PC), .clk(clk), .halt_EX(halt_EX_backward), .halt_MEM(halt_MEM_backward), .DataRS1(DataRS1), .DataRS2(DataRS2), .RF_DataInRd(DataInRd), .RF_Rd(rd), .RF_WEN(RF_WEN), .EX_BRANCH_OR_JUMP(EX_BRANCH_OR_JUMP), 
+                            .MEM_BRANCH_OR_JUMP(MEM_BRANCH_OR_JUMP), .RF_rs1(rs1), .RF_rs2(rs2), .ID_DataRS1(ID_DataRS1), .ID_DataRS2(ID_DataRS2),
+                            .ID_funct7(ID_funct7), .ID_rs1(ID_rs1), .ID_rs2(ID_rs2), .ID_rd(ID_rd), .ID_funct3(ID_funct3), .ID_opcode(ID_opcode), .ID_imm_I(ID_imm_I), 
+                            .ID_imm_S(ID_imm_S), .ID_imm_SB(ID_imm_SB), .ID_imm_U(ID_imm_U), .ID_imm_UJ(ID_imm_UJ), .ID_RWEN(ID_RWEN), .ID_DWEN(ID_DWEN), .ID_MEMREAD(ID_MEMREAD), .ID_BRANCH_OR_JUMP(ID_BRANCH_OR_JUMP), .ID_PC(ID_PC), .IF_stall(IF_stall), .EX_stall(EX_stall)); //instruction decode
     // Execute
-    Execute           EX    (.EX_out(EX_out), .EX_RWEN(EX_RWEN), .EX_rd(EX_rd), .EX_DWEN(EX_DWEN), .branch_flag(branch_flag), .branch_or_jump_target_addr(branch_or_jump_target_addr), 
-                                .load_store_effective_addr(load_store_effective_addr), .EX_DataRS2(EX_DataRS2), .EX_funct3(EX_funct3), .EX_opcode(EX_opcode), .EX_MEMREAD(EX_MEMREAD),
-                                .halt_EX_backward(halt_EX_backward), .halt_EX_forward(halt_EX_forward), .halt_MEM_backward(halt_MEM_backward), .clk(clk), .MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd), .ID_DataRS1(ID_DataRS1), .ID_DataRS2(ID_DataRS2),
-                                .ID_funct7(ID_funct7), .ID_rs1(ID_rs1), .ID_rs2(ID_rs2), .ID_rd(ID_rd), .ID_funct3(ID_funct3), .ID_opcode(ID_opcode), .ID_imm_I(ID_imm_I), 
-                                .ID_imm_S(ID_imm_S), .ID_imm_SB(ID_imm_SB), .ID_imm_U(ID_imm_U), .ID_imm_UJ(ID_imm_UJ), .ID_RWEN(ID_RWEN), .ID_DWEN(ID_DWEN), .ID_MEMREAD(ID_MEMREAD), .ID_BRANCH_OR_JUMP(ID_BRANCH_OR_JUMP), .ID_PC(ID_PC), .EX_stall(EX_stall), .MEM_stall(MEM_stall), .IF_stall_EX(IF_stall_EX)); //execute
+    Execute           EX    (.EX_out(EX_out), .EX_RWEN(EX_RWEN), .EX_rd(EX_rd), .EX_DWEN(EX_DWEN), .branch_flag(branch_flag), .branch_or_jump_target_addr(branch_or_jump_target_addr), .load_store_effective_addr(load_store_effective_addr), .EX_DataRS2(EX_DataRS2), .EX_funct3(EX_funct3), .EX_opcode(EX_opcode), 
+                            .EX_MEMREAD(EX_MEMREAD), .EX_BRANCH_OR_JUMP(EX_BRANCH_OR_JUMP),
+                             .halt_EX_backward(halt_EX_backward), .halt_EX_forward(halt_EX_forward), .halt_MEM_backward(halt_MEM_backward), .clk(clk), .MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd), .ID_DataRS1(ID_DataRS1), .ID_DataRS2(ID_DataRS2),
+                             .ID_funct7(ID_funct7), .ID_rs1(ID_rs1), .ID_rs2(ID_rs2), .ID_rd(ID_rd), .ID_funct3(ID_funct3), .ID_opcode(ID_opcode), .ID_imm_I(ID_imm_I), 
+                             .ID_imm_S(ID_imm_S), .ID_imm_SB(ID_imm_SB), .ID_imm_U(ID_imm_U), .ID_imm_UJ(ID_imm_UJ), .ID_RWEN(ID_RWEN), .ID_DWEN(ID_DWEN), .ID_MEMREAD(ID_MEMREAD), .ID_BRANCH_OR_JUMP(ID_BRANCH_OR_JUMP), .ID_PC(ID_PC), .EX_stall(EX_stall), .MEM_stall(MEM_stall)); //execute
     // memory access
-    MemoryAccess      MA      (.MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd), .DataAddr(DataAddr), .DataSize(DataSize), .DWEN(DWEN), .DataInM(DataInM), .DataOutM(DataOutM), .halt_MEM_backward(halt_MEM_backward), .halt_MEM_forward(halt_MEM_forward), .clk(clk), 
-                                .EX_out(EX_out), .EX_rd(EX_rd), .EX_RWEN(EX_RWEN), .EX_DWEN(EX_DWEN), .load_store_effective_addr(load_store_effective_addr), .EX_DataRS2(EX_DataRS2), .EX_funct3(EX_funct3), .EX_opcode(EX_opcode), .halt_EX_forward(halt_EX_forward), .MEM_stall(MEM_stall)); //memory access
+    MemoryAccess      MA    (.MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd), .MEM_BRANCH_OR_JUMP(MEM_BRANCH_OR_JUMP), .DataAddr(DataAddr), .DataSize(DataSize), .DWEN(DWEN), .DataInM(DataInM), 
+                            .DataOutM(DataOutM), .halt_MEM_backward(halt_MEM_backward), .halt_MEM_forward(halt_MEM_forward), .clk(clk), .EX_out(EX_out), .EX_rd(EX_rd), .EX_RWEN(EX_RWEN), .EX_DWEN(EX_DWEN),
+                             .load_store_effective_addr(load_store_effective_addr), .EX_DataRS2(EX_DataRS2), .EX_funct3(EX_funct3), .EX_opcode(EX_opcode), .EX_BRANCH_OR_JUMP(EX_BRANCH_OR_JUMP), .halt_EX_forward(halt_EX_forward), .MEM_stall(MEM_stall)); //memory access
 
     // Register write back
     RegisterWriteBack  RWB    (.DataInRd(DataInRd), .RF_WEN(RF_WEN), .rd(rd), .MEM_out(MEM_out), .MEM_RWEN(MEM_RWEN), .MEM_rd(MEM_rd), .halt_MEM_forward(halt_MEM_forward), .halt_overall(halt_overall), .clk(clk)); //register write back
