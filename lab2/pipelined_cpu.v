@@ -479,6 +479,7 @@ module InstructionDecode(
     wire [31:0] imm_UJ;
     wire RWEN, DWEN, MEMREAD, BRANCH_OR_JUMP;
     wire load_stall;
+    wire store_stall;
     wire first_branch_or_jump_stall;
     wire second_branch_or_jump_stall;
     wire third_branch_or_jump_stall;
@@ -496,8 +497,11 @@ module InstructionDecode(
     // stall if ID_MEMREAD and ID_rd is not 0 and ID_rd is equal to rs1 or rs2
     assign load_stall = ID_MEMREAD_reg && (ID_rd_reg != 0) && (ID_rd_reg == rs1 || ID_rd_reg == rs2); // stall if EX_MEMREAD and EX_rd is not 0 and EX_rd is equal to rs1 or rs2
 
+    // stall if ID_DWEN == 0 and this instruction is a load and ID_rs1 is equal to rs1. i.e stall if this instruction is a load and previous instruction is a store to the same memory location
+    assign store_stall = !ID_DWEN_reg && MEMREAD && (ID_rs1_reg == rs1); 
+
     assign first_branch_or_jump_stall = ID_BRANCH_OR_JUMP_reg == 1 ? 1 : 0; // stall if previous instruction is branch or jump
-    assign IF_stall = load_stall || first_branch_or_jump_stall; // keep fetching same instruction if load stall or the first stall of branch or jump
+    assign IF_stall = load_stall || store_stall || first_branch_or_jump_stall; // keep fetching same instruction if load stall or the first stall of branch or jump
 
     assign second_branch_or_jump_stall = EX_BRANCH_OR_JUMP == 1 ? 1 : 0; // stall if previous instruction is branch or jump
     assign third_branch_or_jump_stall = MEM_BRANCH_OR_JUMP == 1 ? 1 : 0; // stall if previous instruction is branch or jump
@@ -531,7 +535,7 @@ module InstructionDecode(
             ID_DWEN_reg <= 1;
         end
         else begin 
-            if (load_stall || branch_or_jump_stall) begin
+            if (load_stall || store_stall || branch_or_jump_stall) begin
                 // Make instruction decode stage a bubble
                 ID_RWEN_reg <= 1;
                 ID_DWEN_reg <= 1;
@@ -886,7 +890,10 @@ module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, MEM_BRANCH_OR_JUMP, DataAddr, Dat
 
     wire halt_MEM_opcode, halt_MEM_internal;
 
-    assign halt_MEM_opcode = (EX_opcode == 7'b0000011 || EX_opcode == 7'b0100011) ? halt_load || halt_store : 0; // halt only if load or store halt asserted when opcode is load or store
+    assign halt_MEM_opcode = EX_opcode == 7'b0000011 ? halt_load : //load
+                             EX_opcode == 7'b0100011 ? halt_store : //store
+                             0; //other cases, don't halt
+                             
     assign halt_MEM_internal = halt_MEM_opcode || halt_EX_forward; // halt asserted in this stage or in the previous stage
 
     assign halt_MEM_backward = halt_MEM_internal && !MEM_stall; // halt asserted in this stage and this instruction is being executed i.e it is not a bubble
