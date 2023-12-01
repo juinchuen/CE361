@@ -481,7 +481,6 @@ module InstructionDecode(
     wire [31:0] imm_UJ;
     wire RWEN, DWEN, MEMREAD, BRANCH_OR_JUMP;
     wire load_stall;
-    wire store_stall;
     wire first_branch_or_jump_stall;
     wire second_branch_or_jump_stall;
     wire third_branch_or_jump_stall;
@@ -500,11 +499,8 @@ module InstructionDecode(
     // stall if ID_MEMREAD and ID_rd is not 0 and ID_rd is equal to rs1 or rs2
     assign load_stall = ID_MEMREAD_reg && (ID_rd_reg != 0) && (ID_rd_reg == rs1 || ID_rd_reg == rs2); // stall if EX_MEMREAD and EX_rd is not 0 and EX_rd is equal to rs1 or rs2
 
-    // stall if ID_DWEN == 0 and this instruction is a load and ID_rs1 is equal to rs1. i.e stall if this instruction is a load and previous instruction is a store to the same memory location
-    assign store_stall = !ID_DWEN_reg && MEMREAD && (ID_rs1_reg == rs1); 
-
     assign first_branch_or_jump_stall = ID_BRANCH_OR_JUMP_reg == 1 ? 1 : 0; // stall if previous instruction is branch or jump
-    assign IF_stall = load_stall || store_stall || first_branch_or_jump_stall; // keep fetching same instruction if load stall or the first stall of branch or jump
+    assign IF_stall = load_stall || first_branch_or_jump_stall; // keep fetching same instruction if load stall or the first stall of branch or jump
 
     assign second_branch_or_jump_stall = EX_BRANCH_OR_JUMP == 1 ? 1 : 0; // stall if previous instruction is branch or jump
     assign third_branch_or_jump_stall = MEM_BRANCH_OR_JUMP == 1 ? 1 : 0; // stall if previous instruction is branch or jump
@@ -538,7 +534,7 @@ module InstructionDecode(
             ID_DWEN_reg <= 1;
         end
         else begin 
-            if (load_stall || store_stall || branch_or_jump_stall) begin
+            if (load_stall || branch_or_jump_stall) begin
                 // Make instruction decode stage a bubble
                 ID_RWEN_reg <= 1;
                 ID_DWEN_reg <= 1;
@@ -760,6 +756,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
             EX_out_reg <= 32'b0;
             EX_rd_reg <= ID_rd;
             EX_RWEN_reg <= ID_RWEN;
+            EX_DWEN_reg <= ID_DWEN;
             branch_flag_reg <= 0;
             branch_or_jump_target_addr_reg <= 32'b0;
             load_store_effective_addr_reg <= load_store_effective_addr_internal;
@@ -788,6 +785,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
         else if (ID_opcode == 7'b1100011) begin // Branch
             EX_out_reg <= 32'b0;
             EX_rd_reg <= ID_rd;
+            EX_RWEN_reg <= ID_RWEN;
             EX_DWEN_reg <= ID_DWEN;
             branch_flag_reg <= 1; // branch flag is always asserted for branch instructions as the branch target address is calculated here
             if (branch_flag_internal) begin // if branch flag asserted, branch to branch target address
