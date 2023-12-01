@@ -1,3 +1,5 @@
+// Forwarding implemented in InstructionDecode and Execute stages - check comments in those modules for more details
+
 `include "lib_lab2.v"
 
 `define SIZE_WORD  2'b10
@@ -490,6 +492,7 @@ module InstructionDecode(
     assign RF_rs2 = rs2; 
 
     // Forwarding logic
+    // DataRS1 and DataRS2 are forwarded from RWB stage as ID and RWB are in the same clock cycle
     wire [31:0] DataRS1_forwarded, DataRS2_forwarded;
     assign DataRS1_forwarded = (!RF_WEN && (RF_Rd != 0) && (RF_Rd == rs1)) ? RF_DataInRd : DataRS1;
     assign DataRS2_forwarded = (!RF_WEN && (RF_Rd != 0) && (RF_Rd == rs2)) ? RF_DataInRd : DataRS2;
@@ -668,6 +671,7 @@ module Execute(EX_out, EX_RWEN, EX_rd, EX_DWEN, branch_flag, branch_or_jump_targ
     wire halt_EX_internal;
 
     // Forwarding logic
+    // DataRS1 and DataRS2 are forwarded from EX stage and MEM stage
     wire [31:0] DataRS1_forwarded, DataRS2_forwarded;
 
     assign DataRS1_forwarded = (!EX_RWEN_reg && (EX_rd_reg != 0) && (EX_rd_reg == ID_rs1)) ? EX_out : // Execute stage takes precedence over memory in case of forwarding
@@ -893,7 +897,7 @@ module MemoryAccess(MEM_out, MEM_RWEN, MEM_rd, MEM_BRANCH_OR_JUMP, DataAddr, Dat
     assign halt_MEM_opcode = EX_opcode == 7'b0000011 ? halt_load : //load
                              EX_opcode == 7'b0100011 ? halt_store : //store
                              0; //other cases, don't halt
-                             
+
     assign halt_MEM_internal = halt_MEM_opcode || halt_EX_forward; // halt asserted in this stage or in the previous stage
 
     assign halt_MEM_backward = halt_MEM_internal && !MEM_stall; // halt asserted in this stage and this instruction is being executed i.e it is not a bubble
